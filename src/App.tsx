@@ -16,6 +16,7 @@ const NewTransaction = lazy(() => import('./pages/NewTransaction'));
 const EditTransaction = lazy(() => import('./pages/EditTransaction'));
 const Invoices = lazy(() => import('./pages/Invoices'));
 const NewInvoice = lazy(() => import('./pages/NewInvoice'));
+const ViewInvoice = lazy(() => import('./pages/ViewInvoice'));
 const EditInvoice = lazy(() => import('./pages/EditInvoice'));
 const Receipts = lazy(() => import('./pages/Receipts'));
 const NewReceipt = lazy(() => import('./pages/NewReceipt'));
@@ -52,6 +53,7 @@ const App: React.FC = () => {
 
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoices/new" element={<NewInvoice />} />
+          <Route path="/invoices/:id" element={<ViewInvoice />} />
           <Route path="/invoices/:id/edit" element={<EditInvoice />} />
 
           <Route path="/receipts" element={<Receipts />} />

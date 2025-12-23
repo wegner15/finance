@@ -38,7 +38,8 @@ const NewInvoice: React.FC = () => {
     account_name: '',
     account_number: '',
     swift_code: '',
-    payment_instructions: ''
+    payment_instructions: '',
+    currency: 'KSH'
   });
 
   useEffect(() => {
@@ -222,6 +223,25 @@ const NewInvoice: React.FC = () => {
                       required
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label htmlFor="currency" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Currency
+                    </label>
+                    <select
+                      id="currency"
+                      name="currency"
+                      value={formData.currency}
+                      onChange={handleInputChange}
+                      className="flex h-12 w-full rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-base ring-offset-background focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      required
+                    >
+                      <option value="KSH">KSH (Kenya Shilling)</option>
+                      <option value="USD">USD (US Dollar)</option>
+                      <option value="EUR">EUR (Euro)</option>
+                      <option value="GBP">GBP (British Pound)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -274,7 +294,7 @@ const NewInvoice: React.FC = () => {
                               />
                             </td>
                             <td className="border border-gray-200 dark:border-gray-600 p-2 text-center text-gray-900 dark:text-gray-100">
-                              KSH {item.amount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {formData.currency} {item.amount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className="border border-gray-200 dark:border-gray-600 p-2 text-center">
                               <Button type="button" onClick={() => removeItem(index)} variant="outline" size="sm">
@@ -288,7 +308,7 @@ const NewInvoice: React.FC = () => {
                         <tr className="bg-gray-50 dark:bg-gray-700">
                           <td colSpan={3} className="border border-gray-200 dark:border-gray-600 p-2 text-right font-semibold">Total:</td>
                           <td className="border border-gray-200 dark:border-gray-600 p-2 text-center font-semibold text-gray-900 dark:text-gray-100">
-                            KSH {calculateTotal().toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formData.currency} {calculateTotal().toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="border border-gray-200 dark:border-gray-600 p-2"></td>
                         </tr>

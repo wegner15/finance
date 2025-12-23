@@ -136,8 +136,8 @@ const ViewInvoice: React.FC = () => {
                                             <tr key={index}>
                                                 <td className="py-4 text-gray-900 dark:text-gray-100 font-medium">{item.description}</td>
                                                 <td className="py-4 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
-                                                <td className="py-4 text-right text-gray-600 dark:text-gray-400">{Number(item.price).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
-                                                <td className="py-4 text-right text-gray-900 dark:text-gray-100 font-semibold">{Number(item.quantity * item.price).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
+                                                <td className="py-4 text-right text-gray-600 dark:text-gray-400">{Number(item.rate || item.price || 0).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
+                                                <td className="py-4 text-right text-gray-900 dark:text-gray-100 font-semibold">{Number(item.quantity * (item.rate || item.price || 0)).toLocaleString('en', { minimumFractionDigits: 2 })}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -145,7 +145,7 @@ const ViewInvoice: React.FC = () => {
                                         <tr>
                                             <td colSpan={3} className="pt-6 text-right font-bold text-gray-900 dark:text-gray-100 text-lg">Total Amount:</td>
                                             <td className="pt-6 text-right font-bold text-gray-900 dark:text-gray-100 text-xl text-indigo-600 dark:text-indigo-400">
-                                                KSH {Number(invoice.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
+                                                {invoice.currency} {Number(invoice.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
                                             </td>
                                         </tr>
                                     </tfoot>

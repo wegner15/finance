@@ -3,6 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import Nav from '../components/Nav';
 import { useParams, Link } from 'react-router-dom';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 const ViewQuote: React.FC = () => {
   const { id } = useParams();
@@ -76,9 +83,40 @@ const ViewQuote: React.FC = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{quote.title}</h1>
               <p className="text-gray-600 dark:text-gray-400">Quote #{quote.id}</p>
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-2 ${getStatusBadge(quote.status)}`}>
-                {quote.status || 'draft'}
-              </span>
+              <div className="mt-2">
+                <Select
+                  value={quote.status || 'draft'}
+                  onValueChange={async (value) => {
+                    /* Optimistic update */
+                    const oldStatus = quote.status;
+                    setQuote({ ...quote, status: value });
+
+                    try {
+                      const res = await fetch(`/api/quotes/${quote.id}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: value }),
+                      });
+                      if (!res.ok) throw new Error('Failed to update status');
+                    } catch (err) {
+                      console.error(err);
+                      setQuote({ ...quote, status: oldStatus }); // Revert on error
+                      alert('Failed to update status');
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="accepted">Accepted</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-x-2">
               <Link to={`/quotes/${quote.id}/edit`} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">

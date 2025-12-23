@@ -64,6 +64,7 @@ CREATE TABLE invoices (
     status TEXT CHECK(status IN ('draft', 'sent', 'paid', 'overdue')) DEFAULT 'draft',
     due_date DATE,
     items TEXT, -- JSON string for invoice items
+    currency TEXT DEFAULT 'KSH',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

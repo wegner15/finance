@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { generateProfessionalQuotePDF } from './pdf-generator';
+import { generateProfessionalQuotePDF, generateProfessionalInvoicePDF } from './pdf-generator';
 
 async function pbkdf2Hash(password: string, salt: string): Promise<string> {
 	const enc = new TextEncoder();
@@ -436,7 +436,7 @@ export default {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
 				const data = await request.json();
-				const { id, client_id, company_id, project_id, due_date, items, amount, bank_name, account_name, account_number, swift_code, payment_instructions, status } = data;
+				const { id, client_id, company_id, project_id, due_date, items, amount, bank_name, account_name, account_number, swift_code, payment_instructions, status, currency } = data;
 
 				if (id) {
 					await env.DB.prepare(`
@@ -696,6 +696,44 @@ export default {
 		// Assuming they are essential, I'll keep the PDF generation import but maybe disable the route temporarily or assume it's handled by other means?
 		// Actually, I can't easily reproduce the 500 lines of PDF code here.
 		// I will add a placeholder for PDF routes returning 501.
+		// Quote Status Update API
+		const statusMatch = url.pathname.match(/^\/api\/quotes\/(\d+)\/status$/);
+		if (statusMatch && request.method === 'PATCH') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const quoteId = statusMatch[1];
+				const { status } = await request.json();
+				const allowedStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired'];
+
+				if (!allowedStatuses.includes(status)) {
+					return new Response(JSON.stringify({ error: 'Invalid status' }), { status: 400 });
+				}
+
+				const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').bind(quoteId, currentUser.user_id).first();
+				if (!quote) return new Response('Quote not found', { status: 404 });
+
+				let updateQuery = 'UPDATE quotes SET status = ?';
+				const params: any[] = [status];
+
+				if (status === 'sent' && !quote.sent_at) {
+					updateQuery += ', sent_at = ?';
+					params.push(new Date().toISOString());
+				} else if (status === 'accepted' && !quote.accepted_at) {
+					updateQuery += ', accepted_at = ?';
+					params.push(new Date().toISOString());
+				}
+
+				updateQuery += ' WHERE id = ? AND user_id = ?';
+				params.push(quoteId, currentUser.user_id);
+
+				await env.DB.prepare(updateQuery).bind(...params).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
 		// PDF Generation
 		const pdfMatch = url.pathname.match(/^\/api\/quotes\/(\d+)\/pdf$/);
 		if (pdfMatch && request.method === 'GET') {
@@ -716,6 +754,33 @@ export default {
 					headers: {
 						'Content-Type': 'application/pdf',
 						'Content-Disposition': `inline; filename="Quote-${quote.id}.pdf"`,
+					},
+				});
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// Invoice PDF Generation
+		const invoicePdfMatch = url.pathname.match(/^\/api\/invoices\/(\d+)\/pdf$/);
+		if (invoicePdfMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+
+			try {
+				const invoiceId = invoicePdfMatch[1];
+				const invoice = await env.DB.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').bind(invoiceId, currentUser.user_id).first();
+				if (!invoice) return new Response('Invoice not found', { status: 404 });
+
+				const company = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(invoice.company_id).first();
+				const client = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(invoice.client_id).first();
+				const project = invoice.project_id ? await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(invoice.project_id).first() : null;
+
+				const pdfBytes = await generateProfessionalInvoicePDF(invoice, company, client, project, env);
+
+				return new Response(pdfBytes, {
+					headers: {
+						'Content-Type': 'application/pdf',
+						'Content-Disposition': `inline; filename="Invoice-${invoice.id}.pdf"`,
 					},
 				});
 			} catch (error: any) {
