@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -53,6 +54,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
   initialData,
   quoteId,
 }) => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<QuoteFormData>({
     title: initialData?.title || '',
     companyId: initialData?.companyId || '',
@@ -174,28 +176,50 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('handleSubmit called');
 
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      console.log('Validation failed');
+      return;
+    }
+    console.log('Validation passed');
 
-    const formElement = e.currentTarget as HTMLFormElement;
-    const fd = new FormData(formElement);
+    const payload = {
+      id: quoteId, // Include if editing
+      title: formData.title,
+      company_id: formData.companyId,
+      client_id: formData.clientId,
+      project_id: formData.projectId,
+      introduction: formData.introduction,
+      scope_summary: formData.scope,
+      validity_period: formData.validityDays,
+      notes: formData.terms,
+      items: JSON.stringify(formData.lineItems),
+      payment_terms: JSON.stringify(formData.paymentMilestones)
+    };
 
-    fd.set('data', JSON.stringify(formData));
-
+    console.log('Sending POST request to /api/quotes');
     try {
-      const response = await fetch(quoteId ? `/quotes/${quoteId}` : '/quotes', {
-        method: quoteId ? 'PUT' : 'POST',
-        body: fd,
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
       });
 
+      console.log('Response status:', response.status);
       if (response.ok) {
-        window.location.href = '/quotes';
+        console.log('Success, redirecting to /quotes');
+        navigate('/quotes');
       } else {
-        alert('Failed to save quote');
+        const text = await response.text();
+        console.error('Failed to save quote:', text);
+        alert('Failed to save quote: ' + text);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving quote:', error);
-      alert('Error saving quote');
+      alert('Error saving quote: ' + error.message);
     }
   };
 
@@ -212,7 +236,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
 
   return (
     <div className="space-y-8">
-      <form action={quoteId ? `/quotes/${quoteId}` : '/quotes'} method="post" className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-8">
         {/* Header Section */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
           <CardHeader>
@@ -270,9 +294,8 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, companyId: e.target.value }))
                   }
-                  className={`w-full h-11 px-3 rounded-md border-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors ${
-                    errors.companyId ? 'border-red-500' : 'border-gray-200 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400'
-                  }`}
+                  className={`w-full h-11 px-3 rounded-md border-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors ${errors.companyId ? 'border-red-500' : 'border-gray-200 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400'
+                    }`}
                 >
                   <option value="">Select company</option>
                   {companies.map((company) => (
@@ -296,9 +319,8 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, clientId: e.target.value }))
                   }
-                  className={`w-full h-11 px-3 rounded-md border-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors ${
-                    errors.clientId ? 'border-red-500' : 'border-gray-200 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400'
-                  }`}
+                  className={`w-full h-11 px-3 rounded-md border-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors ${errors.clientId ? 'border-red-500' : 'border-gray-200 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400'
+                    }`}
                 >
                   <option value="">Select client</option>
                   {clients.map((client) => (
@@ -380,7 +402,8 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
         <Card className="border-0 shadow-lg border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-gray-900 dark:text-white">Line Items</CardTitle>
-            <div dangerouslySetInnerHTML={{__html: `
+            <div dangerouslySetInnerHTML={{
+              __html: `
               <button
                 type="button"
                 onclick="addLineItemHandler()"
@@ -536,7 +559,8 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
         <Card className="border-0 shadow-lg border-l-4 border-l-purple-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-gray-900 dark:text-white">Payment Milestones</CardTitle>
-            <div dangerouslySetInnerHTML={{__html: `
+            <div dangerouslySetInnerHTML={{
+              __html: `
               <button
                 type="button"
                 onclick="addMilestoneHandler()"
@@ -570,14 +594,17 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                       <h4 className="font-semibold text-gray-700 dark:text-gray-300">
                         Milestone {index + 1}
                       </h4>
-                      <Button
-                        type="button"
-                        onClick={() => removePaymentMilestone(milestone.id)}
-                        size="sm"
-                        variant="destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div dangerouslySetInnerHTML={{
+                        __html: `
+                        <button
+                          type="button"
+                          onclick="deleteMilestone(this)"
+                          style="background-color: rgb(220, 38, 38); color: white;"
+                          class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-md hover:opacity-90 transition-colors cursor-pointer"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                        </button>
+                      `}} />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

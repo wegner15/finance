@@ -1,23 +1,57 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { useNavigate } from 'react-router-dom';
 import User from 'lucide-react/dist/esm/icons/user';
 import Mail from 'lucide-react/dist/esm/icons/mail';
 import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Nav from '../components/Nav';
 
-interface NewClientProps {
-  theme: string;
-  path: string;
-}
+const NewClient: React.FC = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
-const NewClient: React.FC<NewClientProps> = ({ theme, path }) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      name: formData.get('name'),
+      email: formData.get('email'),
+      phone: formData.get('phone'),
+      address: formData.get('address'),
+    };
+
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        navigate('/clients');
+      } else {
+        const errorData = await response.json();
+        alert('Failed to create client: ' + errorData.error);
+      }
+    } catch (error) {
+      console.error('Error creating client:', error);
+      alert('Error creating client');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} path={path} />
-      <div className="ml-64 p-8">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
         <div className="max-w-3xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Add New Client</h1>
@@ -31,7 +65,7 @@ const NewClient: React.FC<NewClientProps> = ({ theme, path }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8 bg-white dark:bg-gray-800">
-              <form action="/clients" method="post" className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label htmlFor="name" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
@@ -91,17 +125,20 @@ const NewClient: React.FC<NewClientProps> = ({ theme, path }) => {
                   </div>
                 </div>
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <a
-                    href="/clients"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-12 px-6 py-3"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/clients')}
+                    className="h-12 px-6 py-3"
                   >
                     Cancel
-                  </a>
+                  </Button>
                   <Button
                     type="submit"
+                    disabled={loading}
                     className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold h-12 px-8 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all"
                   >
-                    Save Client
+                    {loading ? 'Saving...' : 'Save Client'}
                   </Button>
                 </div>
               </form>

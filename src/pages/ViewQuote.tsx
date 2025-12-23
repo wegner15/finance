@@ -1,18 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import Nav from '../components/Nav';
+import { useParams, Link } from 'react-router-dom';
 
-interface ViewQuoteProps {
-  theme: string;
-  path: string;
-  quote: any;
-  company?: any;
-  client?: any;
-  project?: any;
-}
+const ViewQuote: React.FC = () => {
+  const { id } = useParams();
+  const [quote, setQuote] = useState<any>(null);
+  const [company, setCompany] = useState<any>(null);
+  const [client, setClient] = useState<any>(null);
+  const [project, setProject] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-const ViewQuote: React.FC<ViewQuoteProps> = ({ theme, path, quote, company, client, project }) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!id) return;
+      try {
+        const quoteRes = await fetch(`/api/quotes/${id}`);
+        if (!quoteRes.ok) throw new Error('Failed to fetch quote');
+        const quoteData = await quoteRes.json();
+        setQuote(quoteData);
+
+        const promises = [];
+        if (quoteData.company_id) promises.push(fetch(`/api/companies/${quoteData.company_id}`).then(res => res.json()).then(setCompany));
+        if (quoteData.client_id) promises.push(fetch(`/api/clients/${quoteData.client_id}`).then(res => res.json()).then(setClient));
+        if (quoteData.project_id) promises.push(fetch(`/api/projects/${quoteData.project_id}`).then(res => res.json()).then(setProject));
+
+        await Promise.all(promises);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!quote) return <div>Quote not found</div>;
+
   const items = JSON.parse(quote.items || '[]');
   const deliverables = JSON.parse(quote.deliverables || '[]');
   const payment_terms = JSON.parse(quote.payment_terms || '[]');
@@ -35,8 +68,8 @@ const ViewQuote: React.FC<ViewQuoteProps> = ({ theme, path, quote, company, clie
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} path={path} />
-      <div className="ml-64 p-8">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex justify-between items-start">
@@ -48,10 +81,10 @@ const ViewQuote: React.FC<ViewQuoteProps> = ({ theme, path, quote, company, clie
               </span>
             </div>
             <div className="space-x-2">
-              <a href={`/quotes/${quote.id}/edit`} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">
+              <Link to={`/quotes/${quote.id}/edit`} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">
                 Edit
-              </a>
-              <a href={`/quotes/${quote.id}/pdf`} target="_blank" className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+              </Link>
+              <a href={`/api/quotes/${quote.id}/pdf`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
                 Download PDF
               </a>
             </div>

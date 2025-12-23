@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { useNavigate, useParams } from 'react-router-dom';
 import Building from 'lucide-react/dist/esm/icons/building';
 import Mail from 'lucide-react/dist/esm/icons/mail';
 import Phone from 'lucide-react/dist/esm/icons/phone';
@@ -9,17 +10,86 @@ import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Image from 'lucide-react/dist/esm/icons/image';
 import Nav from '../components/Nav';
 
-interface EditCompanyProps {
-  theme: string;
-  path: string;
-  company: any;
+interface CompanyData {
+  id?: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  logo_url?: string;
 }
 
-const EditCompany: React.FC<EditCompanyProps> = ({ theme, path, company }) => {
+const EditCompany: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const [loading, setLoading] = useState(false);
+  const [company, setCompany] = useState<CompanyData | null>(null);
+
+  useEffect(() => {
+    const fetchCompany = async () => {
+      if (!id) return;
+      try {
+        const response = await fetch(`/api/companies/${id}`);
+        if (!response.ok) throw new Error('Failed to fetch company');
+        const data = await response.json();
+        setCompany(data);
+      } catch (error) {
+        console.error('Error fetching company:', error);
+        navigate('/companies');
+      }
+    };
+    fetchCompany();
+  }, [id, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      id,
+      name: formData.get('name'),
+      email: formData.get('email'),
+      phone: formData.get('phone'),
+      address: formData.get('address'),
+      logo_url: company?.logo_url || '',
+    };
+
+    try {
+      const response = await fetch('/api/companies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        navigate('/companies');
+      } else {
+        const errorData = await response.json();
+        alert('Failed to update company: ' + errorData.error);
+      }
+    } catch (error) {
+      console.error('Error updating company:', error);
+      alert('Error updating company');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!company) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-500 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} path={path} />
-      <div className="ml-64 p-8">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
         <div className="max-w-3xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Edit Company</h1>
@@ -33,8 +103,7 @@ const EditCompany: React.FC<EditCompanyProps> = ({ theme, path, company }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8 bg-white dark:bg-gray-800">
-              <form action="/companies" method="post" className="space-y-6">
-                <input type="hidden" name="id" value={company.id} />
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label htmlFor="name" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
@@ -105,23 +174,39 @@ const EditCompany: React.FC<EditCompanyProps> = ({ theme, path, company }) => {
                     name="logo"
                     type="file"
                     accept="image/*"
-                    className="h-12 text-base text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 focus:border-purple-500 dark:focus:border-purple-400 rounded-lg"
+                    disabled
+                    className="h-12 text-base text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 focus:border-purple-500 dark:focus:border-purple-400 rounded-lg cursor-not-allowed opacity-50"
                   />
-                  {company.logo_url && <img src={company.logo_url} alt="Current Logo" className="w-16 h-16 mt-2" />}
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Upload a new logo to replace the current one (optional)</p>
+                  {company.logo_url && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Logo:</p>
+                      <img
+                        src={company.logo_url}
+                        alt="Company Logo"
+                        className="w-32 h-32 object-contain rounded-lg border-2 border-gray-200 dark:border-gray-600 p-2 bg-white dark:bg-gray-700"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Logo update is temporarily disabled.</p>
                 </div>
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <a
-                    href="/companies"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-12 px-6 py-3"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/companies')}
+                    className="h-12 px-6 py-3"
                   >
                     Cancel
-                  </a>
+                  </Button>
                   <Button
                     type="submit"
+                    disabled={loading}
                     className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold h-12 px-8 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all"
                   >
-                    Update Company
+                    {loading ? 'Updating...' : 'Update Company'}
                   </Button>
                 </div>
               </form>

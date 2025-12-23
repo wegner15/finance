@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -9,19 +9,76 @@ import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import Nav from '../components/Nav';
+import { useNavigate } from 'react-router-dom';
 
-interface NewTransactionProps {
-  theme: string;
-  path: string;
-  projects: any[];
-  categories: string[];
-}
+const DEFAULT_CATEGORIES = [
+  'Consulting',
+  'Development',
+  'Design',
+  'Marketing',
+  'Hosting',
+  'Tools',
+  'Office',
+  'Travel',
+  'Utilities',
+  'Taxes',
+  'Salary',
+  'Other'
+];
 
-const NewTransaction: React.FC<NewTransactionProps> = ({ theme, path, projects, categories }) => {
+const NewTransaction: React.FC = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/projects')
+      .then((res) => res.json())
+      .then(setProjects)
+      .catch((err) => console.error('Error fetching projects:', err));
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      type: formData.get('type'),
+      amount: formData.get('amount'),
+      category: formData.get('category'),
+      date: formData.get('date'),
+      description: formData.get('description'),
+      project_id: formData.get('project_id'),
+    };
+
+    try {
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        navigate('/transactions');
+      } else {
+        const errorData = await response.json();
+        alert('Failed to create transaction: ' + errorData.error);
+      }
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      alert('Error creating transaction');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} path={path} />
-      <div className="ml-64 p-8">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
         <div className="max-w-3xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Add New Transaction</h1>
@@ -35,7 +92,7 @@ const NewTransaction: React.FC<NewTransactionProps> = ({ theme, path, projects, 
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8 bg-white dark:bg-gray-800">
-              <form action="/transactions" method="post" className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label htmlFor="type" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">
@@ -84,7 +141,7 @@ const NewTransaction: React.FC<NewTransactionProps> = ({ theme, path, projects, 
                         required
                       />
                       <datalist id="categories">
-                        {categories.map((category, index) => (
+                        {DEFAULT_CATEGORIES.map((category, index) => (
                           <option key={index} value={category} />
                         ))}
                       </datalist>
@@ -122,29 +179,32 @@ const NewTransaction: React.FC<NewTransactionProps> = ({ theme, path, projects, 
                     <Folder className="w-4 h-4 mr-2" />
                     Project (Optional)
                   </label>
-                   <select
-                     id="project_id"
-                     name="project_id"
-                     className="flex h-12 w-full rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-base ring-offset-background focus:border-indigo-500 dark:focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                   >
-                     <option value="">Select a project (optional)</option>
-                     {projects.map((project) => (
-                       <option key={project.id} value={project.id}>{project.name}</option>
-                     ))}
-                   </select>
+                  <select
+                    id="project_id"
+                    name="project_id"
+                    className="flex h-12 w-full rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-base ring-offset-background focus:border-indigo-500 dark:focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Select a project (optional)</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <a
-                    href="/transactions"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-12 px-6 py-3"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/transactions')}
+                    className="h-12 px-6 py-3"
                   >
                     Cancel
-                  </a>
+                  </Button>
                   <Button
                     type="submit"
+                    disabled={loading}
                     className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-semibold h-12 px-8 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all"
                   >
-                    Save Transaction
+                    {loading ? 'Saving...' : 'Save Transaction'}
                   </Button>
                 </div>
               </form>

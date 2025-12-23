@@ -1,24 +1,52 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import QuoteBuilder from '../components/QuoteBuilder';
 import Nav from '../components/Nav';
+import { useNavigate } from 'react-router-dom';
 
-interface NewQuoteProps {
-  theme: string;
-  path: string;
-  companies: any[];
-  clients: any[];
-  projects: any[];
-}
+const NewQuote: React.FC = () => {
+  const navigate = useNavigate();
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-const NewQuote: React.FC<NewQuoteProps> = ({ theme, path, companies, clients, projects }) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [compRes, cliRes, projRes] = await Promise.all([
+          fetch('/api/companies'),
+          fetch('/api/clients'),
+          fetch('/api/projects')
+        ]);
+
+        if (compRes.ok) setCompanies(await compRes.json());
+        if (cliRes.ok) setClients(await cliRes.json());
+        if (projRes.ok) setProjects(await projRes.json());
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const handleCancel = () => {
-    window.location.href = '/quotes';
+    navigate('/quotes');
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} path={path} />
-      <div className="ml-64 p-8">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
         <div className="max-w-5xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Create New Quote</h1>
