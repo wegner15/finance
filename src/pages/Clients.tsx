@@ -4,6 +4,8 @@ import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Client {
   id: number;
@@ -17,6 +19,8 @@ const Clients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const notify = useNotification();
+  const confirm = useConfirmation();
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -101,16 +105,25 @@ const Clients: React.FC = () => {
                             variant="destructive"
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this client?')) return;
+                              const isConfirmed = await confirm.confirm({
+                                title: 'Delete Client',
+                                message: 'Are you sure you want to delete this client? This action cannot be undone.',
+                                variant: 'danger',
+                                confirmText: 'Delete',
+                              });
+
+                              if (!isConfirmed) return;
+
                               try {
                                 const res = await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
                                 if (res.ok) {
                                   setClients(clients.filter(c => c.id !== client.id));
+                                  notify.success('Client deleted successfully');
                                 } else {
-                                  alert('Failed to delete client');
+                                  notify.error('Failed to delete client');
                                 }
                               } catch (e) {
-                                alert('Error deleting client');
+                                notify.error('Error deleting client');
                               }
                             }}
                             className="h-8 px-3"

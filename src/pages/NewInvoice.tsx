@@ -12,6 +12,7 @@ import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign';
 import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import Nav from '../components/Nav';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface InvoiceItem {
   description: string;
@@ -22,6 +23,7 @@ interface InvoiceItem {
 
 const NewInvoice: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [companies, setCompanies] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -116,11 +118,13 @@ const NewInvoice: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Invoice created successfully');
         navigate('/invoices');
       } else {
-        console.error('Failed to create invoice');
+        notify.error('Failed to create invoice');
       }
     } catch (error) {
+      notify.error('Error submitting invoice');
       console.error('Error submitting invoice:', error);
     }
   };

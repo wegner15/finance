@@ -8,10 +8,13 @@ import Mail from 'lucide-react/dist/esm/icons/mail';
 import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Image from 'lucide-react/dist/esm/icons/image';
+import Image from 'lucide-react/dist/esm/icons/image';
 import Nav from '../components/Nav';
+import { useNotification } from '../contexts/NotificationContext';
 
 const NewCompany: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -38,14 +41,15 @@ const NewCompany: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Company created successfully');
         navigate('/companies');
       } else {
         const errorData = await response.json();
-        alert('Failed to create company: ' + errorData.error);
+        notify.error('Failed to create company: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error creating company:', error);
-      alert('Error creating company');
+      notify.error('Error creating company');
     } finally {
       setLoading(false);
     }

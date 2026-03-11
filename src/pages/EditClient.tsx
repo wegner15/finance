@@ -7,7 +7,9 @@ import User from 'lucide-react/dist/esm/icons/user';
 import Mail from 'lucide-react/dist/esm/icons/mail';
 import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
+import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Nav from '../components/Nav';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ClientData {
     id?: string;
@@ -19,6 +21,7 @@ interface ClientData {
 
 const EditClient: React.FC = () => {
     const navigate = useNavigate();
+    const notify = useNotification();
     const { id } = useParams();
     const [loading, setLoading] = useState(false);
     const [client, setClient] = useState<ClientData | null>(null);
@@ -62,14 +65,15 @@ const EditClient: React.FC = () => {
             });
 
             if (response.ok) {
+                notify.success('Client updated successfully');
                 navigate('/clients');
             } else {
                 const errorData = await response.json();
-                alert('Failed to update client: ' + errorData.error);
+                notify.error('Failed to update client: ' + errorData.error);
             }
         } catch (error) {
             console.error('Error updating client:', error);
-            alert('Error updating client');
+            notify.error('Error updating client');
         } finally {
             setLoading(false);
         }

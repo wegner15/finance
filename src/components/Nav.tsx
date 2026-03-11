@@ -14,6 +14,7 @@ import Moon from 'lucide-react/dist/esm/icons/moon';
 import User from 'lucide-react/dist/esm/icons/user';
 import Menu from 'lucide-react/dist/esm/icons/menu';
 import X from 'lucide-react/dist/esm/icons/x';
+import Wallet from 'lucide-react/dist/esm/icons/wallet';
 import { Button } from './ui/button';
 
 interface NavProps {
@@ -57,6 +58,7 @@ const Nav: React.FC<NavProps> = () => {
     { href: '/invoices', label: 'Invoices', icon: FileText },
     { href: '/receipts', label: 'Receipts', icon: Receipt },
     { href: '/quotes', label: 'Quotes', icon: Quote },
+    { href: '/budgets', label: 'Budgets', icon: Wallet },
     { href: '/profile', label: 'Profile', icon: User },
   ];
 

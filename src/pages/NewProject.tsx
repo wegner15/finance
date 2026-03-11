@@ -7,9 +7,11 @@ import Users from 'lucide-react/dist/esm/icons/users';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Nav from '../components/Nav';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 const NewProject: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
 
@@ -17,7 +19,10 @@ const NewProject: React.FC = () => {
     fetch('/api/clients')
       .then((res) => res.json())
       .then(setClients)
-      .catch((err) => console.error('Error fetching clients:', err));
+      .catch((err) => {
+        console.error('Error fetching clients:', err);
+        notify.error('Failed to load clients');
+      });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,14 +46,15 @@ const NewProject: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Project created successfully');
         navigate('/projects');
       } else {
         const errorData = await response.json();
-        alert('Failed to create project: ' + errorData.error);
+        notify.error('Failed to create project: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error creating project:', error);
-      alert('Error creating project');
+      notify.error('Error creating project');
     } finally {
       setLoading(false);
     }

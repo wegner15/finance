@@ -9,6 +9,12 @@ import BarChart from 'lucide-react/dist/esm/icons/bar-chart';
 import MonthlyTrendChart from '../components/MonthlyTrendChart';
 import ProjectBreakdownChart from '../components/ProjectBreakdownChart';
 import CategoryBreakdownChart from '../components/CategoryBreakdownChart';
+import { BudgetProgress } from '../components/BudgetProgress';
+import Wallet from 'lucide-react/dist/esm/icons/wallet';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
+import Plus from 'lucide-react/dist/esm/icons/plus';
+import { Link } from 'react-router-dom';
+import { Button } from '../components/ui/button';
 
 interface DashboardProps {
   theme: string;
@@ -42,6 +48,13 @@ interface DashboardProps {
       total: number;
     }>;
   };
+  budgets: Array<{
+    id: number;
+    category: string;
+    amount: number;
+    spent: number;
+    period: string;
+  }>;
 }
 
 const Dashboard: React.FC = () => {
@@ -69,7 +82,7 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const { theme, path, stats, recentTransactions, upcomingInvoices, transactionStats } = data;
+  const { theme, path, stats, recentTransactions, upcomingInvoices, transactionStats, budgets } = data;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
@@ -144,6 +157,51 @@ const Dashboard: React.FC = () => {
             <ProjectBreakdownChart data={transactionStats.projectBreakdown} />
             <CategoryBreakdownChart data={transactionStats.categoryBreakdown} />
           </div>
+        </div>
+
+        {/* Budget Tracking Section - New */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center">
+              <Wallet className="w-6 h-6 mr-3 text-primary" />
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Budget Tracking</h2>
+            </div>
+            <Link to="/budgets" className="text-primary hover:text-primary/80 flex items-center text-sm font-medium">
+              Manage Budgets <ArrowRight className="ml-1 w-4 h-4" />
+            </Link>
+          </div>
+          
+          {budgets && budgets.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {budgets.slice(0, 3).map((budget) => (
+                <Card key={budget.id} className="border-none shadow-md dark:bg-gray-800">
+                  <CardContent className="p-6">
+                    <BudgetProgress
+                      category={budget.category}
+                      amount={budget.amount}
+                      spent={budget.spent}
+                      period={budget.period}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+              {budgets.length > 3 && (
+                <Card className="border-none shadow-md dark:bg-gray-800 flex items-center justify-center p-6 border-2 border-dashed border-gray-200 dark:border-gray-700">
+                  <Link to="/budgets" className="text-gray-500 hover:text-primary transition-colors flex flex-col items-center">
+                    <Plus className="w-8 h-8 mb-2" />
+                    <span className="text-sm font-medium">View {budgets.length - 3} more budgets</span>
+                  </Link>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <Card className="border-none shadow-md dark:bg-gray-800 p-8 text-center border-2 border-dashed border-gray-200 dark:border-gray-700">
+              <p className="text-gray-500 mb-4">You haven't set any budgets yet.</p>
+              <Button asChild variant="outline">
+                <Link to="/budgets">Create Your First Budget</Link>
+              </Button>
+            </Card>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

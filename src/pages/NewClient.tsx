@@ -7,10 +7,13 @@ import User from 'lucide-react/dist/esm/icons/user';
 import Mail from 'lucide-react/dist/esm/icons/mail';
 import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
+import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Nav from '../components/Nav';
+import { useNotification } from '../contexts/NotificationContext';
 
 const NewClient: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -35,14 +38,15 @@ const NewClient: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Client created successfully');
         navigate('/clients');
       } else {
         const errorData = await response.json();
-        alert('Failed to create client: ' + errorData.error);
+        notify.error('Failed to create client: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error creating client:', error);
-      alert('Error creating client');
+      notify.error('Error creating client');
     } finally {
       setLoading(false);
     }

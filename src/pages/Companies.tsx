@@ -5,6 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Building } from 'lucide-react';
 import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Company {
   id: number;
@@ -19,6 +21,8 @@ const Companies: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const notify = useNotification();
+  const confirm = useConfirmation();
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -120,16 +124,25 @@ const Companies: React.FC = () => {
                             variant="destructive"
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this company?')) return;
+                              const isConfirmed = await confirm.confirm({
+                                title: 'Delete Company',
+                                message: 'Are you sure you want to delete this company? This action cannot be undone.',
+                                variant: 'danger',
+                                confirmText: 'Delete',
+                              });
+
+                              if (!isConfirmed) return;
+
                               try {
                                 const res = await fetch(`/api/companies/${company.id}`, { method: 'DELETE' });
                                 if (res.ok) {
                                   setCompanies(companies.filter(c => c.id !== company.id));
+                                  notify.success('Company deleted successfully');
                                 } else {
-                                  alert('Failed to delete company');
+                                  notify.error('Failed to delete company');
                                 }
                               } catch (e) {
-                                alert('Error deleting company');
+                                notify.error('Error deleting company');
                               }
                             }}
                             className="h-8 px-3"

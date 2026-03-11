@@ -12,6 +12,7 @@ import Plus from 'lucide-react/dist/esm/icons/plus';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import Nav from '../components/Nav';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ReceiptItem {
   description: string;
@@ -23,6 +24,7 @@ interface ReceiptItem {
 const EditReceipt: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const notify = useNotification();
   const [companies, setCompanies] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -80,6 +82,7 @@ const EditReceipt: React.FC = () => {
           });
         } else {
           console.error("Failed to fetch receipt");
+          notify.error('Receipt not found');
           navigate('/receipts');
         }
       } catch (error) {
@@ -145,11 +148,13 @@ const EditReceipt: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Receipt updated successfully');
         navigate('/receipts');
       } else {
-        console.error('Failed to update receipt');
+        notify.error('Failed to update receipt');
       }
     } catch (error) {
+      notify.error('Error submitting receipt');
       console.error('Error submitting receipt:', error);
     }
   };

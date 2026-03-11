@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
+import { useNotification } from '../contexts/NotificationContext';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Quote {
   id: number;
@@ -26,6 +28,8 @@ const Quotes: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const notify = useNotification();
+  const confirm = useConfirmation();
 
   useEffect(() => {
     const fetchQuotes = async () => {
@@ -182,16 +186,25 @@ const Quotes: React.FC = () => {
                             variant="destructive"
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this quote?')) return;
+                              const isConfirmed = await confirm.confirm({
+                                title: 'Delete Quote',
+                                message: 'Are you sure you want to delete this quote? This action cannot be undone.',
+                                variant: 'danger',
+                                confirmText: 'Delete',
+                              });
+
+                              if (!isConfirmed) return;
+
                               try {
                                 const res = await fetch(`/api/quotes/${quote.id}`, { method: 'DELETE' });
                                 if (res.ok) {
                                   setQuotes(quotes.filter(q => q.id !== quote.id));
+                                  notify.success('Quote deleted successfully');
                                 } else {
-                                  alert('Failed to delete quote');
+                                  notify.error('Failed to delete quote');
                                 }
                               } catch (e) {
-                                alert('Error deleting quote');
+                                notify.error('Error deleting quote');
                               }
                             }}
                             className="h-8 px-3"

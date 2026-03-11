@@ -9,8 +9,18 @@ import Download from 'lucide-react/dist/esm/icons/download';
 import Nav from '../components/Nav';
 import { useParams } from 'react-router-dom';
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { useNotification } from '../contexts/NotificationContext';
+
 const ViewReceipt: React.FC = () => {
   const { id } = useParams();
+  const notify = useNotification();
   const [receipt, setReceipt] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
@@ -60,7 +70,7 @@ const ViewReceipt: React.FC = () => {
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Receipt #{receipt.id}</h1>
-            <a href={`/receipts/${receipt.id}/pdf`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+            <a href={`/api/receipts/${receipt.id}/pdf`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
               <Download className="w-4 h-4 mr-2" />
               Download PDF
             </a>
@@ -108,11 +118,41 @@ const ViewReceipt: React.FC = () => {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Receipt Information</h3>
                   <div className="text-right">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center mb-2 justify-end">
                       <Calendar className="w-4 h-4 mr-1" />
                       Date: {new Date(receipt.date).toLocaleDateString()}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Status: {receipt.status}</p>
+                    <div className="w-[140px] inline-block">
+                      <Select
+                        value={receipt.status || 'draft'}
+                        onValueChange={async (value) => {
+                          const oldStatus = receipt.status;
+                          setReceipt({ ...receipt, status: value });
+                          try {
+                            const res = await fetch(`/api/receipts/${receipt.id}/status`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: value }),
+                            });
+                            if (!res.ok) throw new Error('Failed to update status');
+                          } catch (err) {
+                            console.error(err);
+                            setReceipt({ ...receipt, status: oldStatus });
+                            notify.error('Failed to update status');
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                 {project && (

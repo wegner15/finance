@@ -6,6 +6,14 @@ import Nav from '../components/Nav';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import Printer from 'lucide-react/dist/esm/icons/printer';
 import Edit from 'lucide-react/dist/esm/icons/edit';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../components/ui/select";
+import { useNotification } from '../contexts/NotificationContext';
 
 const ViewInvoice: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -13,6 +21,7 @@ const ViewInvoice: React.FC = () => {
     const [invoice, setInvoice] = useState<any>(null); // Ideally use a proper interface shared across apps
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const notify = useNotification();
 
     useEffect(() => {
         const fetchInvoice = async () => {
@@ -90,11 +99,38 @@ const ViewInvoice: React.FC = () => {
                                     <p className="opacity-90">Due: {new Date(invoice.due_date).toLocaleDateString()}</p>
                                 </div>
                                 <div className="text-right">
-                                    <div className={`inline-block px-4 py-1 rounded-full text-sm font-semibold mb-2 ${invoice.status === 'paid' ? 'bg-green-400 text-green-900' :
-                                        invoice.status === 'sent' ? 'bg-blue-300 text-blue-900' :
-                                            'bg-yellow-300 text-yellow-900'
-                                        }`}>
-                                        {invoice.status?.toUpperCase() || 'DRAFT'}
+                                    <div className="text-right">
+                                        <div className="w-[140px] inline-block">
+                                            <Select
+                                                value={invoice.status || 'draft'}
+                                                onValueChange={async (value) => {
+                                                    const oldStatus = invoice.status;
+                                                    setInvoice({ ...invoice, status: value });
+                                                    try {
+                                                        const res = await fetch(`/api/invoices/${invoice.id}/status`, {
+                                                            method: 'PATCH',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ status: value }),
+                                                        });
+                                                        if (!res.ok) throw new Error('Failed to update status');
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        setInvoice({ ...invoice, status: oldStatus });
+                                                        notify.error('Failed to update status');
+                                                    }
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-8 border-transparent bg-white/20 text-white hover:bg-white/30 focus:ring-0 focus:ring-offset-0">
+                                                    <SelectValue placeholder="Status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="draft">Draft</SelectItem>
+                                                    <SelectItem value="sent">Sent</SelectItem>
+                                                    <SelectItem value="paid">Paid</SelectItem>
+                                                    <SelectItem value="overdue">Overdue</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -95,7 +95,7 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data }) => {
       textStyle: {
         fontSize: 13,
         fontWeight: 500,
-        color: '#6b7280',
+        color: '#9ca3af',
         fontFamily: 'Inter, sans-serif',
       },
       itemGap: 24,

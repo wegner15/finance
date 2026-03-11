@@ -10,9 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { useNotification } from '../contexts/NotificationContext';
 
 const ViewQuote: React.FC = () => {
   const { id } = useParams();
+  const notify = useNotification();
   const [quote, setQuote] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
@@ -101,7 +103,7 @@ const ViewQuote: React.FC = () => {
                     } catch (err) {
                       console.error(err);
                       setQuote({ ...quote, status: oldStatus }); // Revert on error
-                      alert('Failed to update status');
+                      notify.error('Failed to update status');
                     }
                   }}
                 >

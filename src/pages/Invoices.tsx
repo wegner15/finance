@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
+import { useNotification } from '../contexts/NotificationContext';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Invoice {
   id: number;
@@ -24,6 +26,8 @@ const Invoices: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const notify = useNotification();
+  const confirm = useConfirmation();
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -160,16 +164,25 @@ const Invoices: React.FC = () => {
                             variant="destructive"
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this invoice?')) return;
+                              const isConfirmed = await confirm.confirm({
+                                title: 'Delete Invoice',
+                                message: 'Are you sure you want to delete this invoice? This action cannot be undone.',
+                                variant: 'danger',
+                                confirmText: 'Delete',
+                              });
+
+                              if (!isConfirmed) return;
+
                               try {
                                 const res = await fetch(`/api/invoices/${invoice.id}`, { method: 'DELETE' });
                                 if (res.ok) {
                                   setInvoices(invoices.filter(i => i.id !== invoice.id));
+                                  notify.success('Invoice deleted successfully');
                                 } else {
-                                  alert('Failed to delete invoice');
+                                  notify.error('Failed to delete invoice');
                                 }
                               } catch (e) {
-                                alert('Error deleting invoice');
+                                notify.error('Error deleting invoice');
                               }
                             }}
                             className="h-8 px-3"

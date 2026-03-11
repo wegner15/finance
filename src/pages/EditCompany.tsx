@@ -9,6 +9,7 @@ import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Image from 'lucide-react/dist/esm/icons/image';
 import Nav from '../components/Nav';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface CompanyData {
   id?: string;
@@ -21,6 +22,7 @@ interface CompanyData {
 
 const EditCompany: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [company, setCompany] = useState<CompanyData | null>(null);
@@ -65,14 +67,15 @@ const EditCompany: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Company updated successfully');
         navigate('/companies');
       } else {
         const errorData = await response.json();
-        alert('Failed to update company: ' + errorData.error);
+        notify.error('Failed to update company: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error updating company:', error);
-      alert('Error updating company');
+      notify.error('Error updating company');
     } finally {
       setLoading(false);
     }

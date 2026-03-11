@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { generateProfessionalQuotePDF, generateProfessionalInvoicePDF } from './pdf-generator';
+import { generateProfessionalQuotePDF, generateProfessionalInvoicePDF, generateProfessionalReceiptPDF } from './pdf-generator';
 
 async function pbkdf2Hash(password: string, salt: string): Promise<string> {
 	const enc = new TextEncoder();
@@ -65,11 +65,84 @@ export default {
 				`ALTER TABLE quotes ADD COLUMN notes TEXT;`,
 				`ALTER TABLE quotes ADD COLUMN amount REAL;`,
 				`ALTER TABLE invoices ADD COLUMN company_id INTEGER;`,
-				`ALTER TABLE receipts ADD COLUMN company_id INTEGER;`
+				`ALTER TABLE receipts ADD COLUMN company_id INTEGER;`,
+				`CREATE TABLE IF NOT EXISTS project_columns (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					position INTEGER NOT NULL
+				);`,
+				`CREATE TABLE IF NOT EXISTS tasks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					column_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					due_date TEXT,
+					assignee TEXT,
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				);`,
+				`CREATE TABLE IF NOT EXISTS milestones (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					due_date TEXT,
+					status TEXT DEFAULT 'pending'
+				);`,
+				`CREATE TABLE IF NOT EXISTS tickets (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					status TEXT DEFAULT 'open',
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				);`
 			];
 			for (const update of schemaUpdates) {
-				await env.DB.exec(update).catch(() => { });
+				await env.DB.exec(update).catch((e) => console.log('Migration notice:', e.message));
 			}
+
+			// Explicitly create new tables with logging
+			try {
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS project_columns (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					position INTEGER NOT NULL
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tasks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					column_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					due_date TEXT,
+					assignee TEXT,
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS milestones (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					due_date TEXT,
+					status TEXT DEFAULT 'pending'
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tickets (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					status TEXT DEFAULT 'open',
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				)`);
+			} catch (e: any) {
+				console.error('Critical Error creating new tables:', e.message);
+			}
+
 		} catch (error) {
 			console.log('Migration error:', error);
 		}
@@ -166,6 +239,48 @@ export default {
 			});
 		}
 
+		// Debug: Manual DB Init
+		if (url.pathname === '/api/debug/db-init') {
+			try {
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS project_columns (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					position INTEGER NOT NULL
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tasks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					column_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					due_date TEXT,
+					assignee TEXT,
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS milestones (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					due_date TEXT,
+					status TEXT DEFAULT 'pending'
+				)`);
+				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tickets (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					project_id INTEGER NOT NULL,
+					title TEXT NOT NULL,
+					description TEXT,
+					priority TEXT DEFAULT 'medium',
+					status TEXT DEFAULT 'open',
+					created_at TEXT DEFAULT CURRENT_TIMESTAMP
+				)`);
+				return new Response('Tables created successfully');
+			} catch (e: any) {
+				return new Response('Error: ' + e.message, { status: 500 });
+			}
+		}
+
 		// Dashboard API
 		if (url.pathname === '/api/dashboard' && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
@@ -227,7 +342,19 @@ export default {
 						monthlyTrends: (monthlyTrends.results || []).reverse(),
 						projectBreakdown: projectBreakdown.results || [],
 						categoryBreakdown: categoryBreakdown.results || []
-					}
+					},
+					budgets: await (async () => {
+						const budgets = await env.DB.prepare('SELECT * FROM budgets WHERE user_id = ?').bind(currentUser.user_id).all();
+						const budgetData = [];
+						for (const budget of budgets.results as any[]) {
+							const spent = await env.DB.prepare("SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND category = ? AND type = 'expense' AND date >= ?").bind(currentUser.user_id, budget.category, budget.start_date).first();
+							budgetData.push({
+								...budget,
+								spent: spent?.total || 0
+							});
+						}
+						return budgetData;
+					})()
 				};
 				return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error) {
@@ -344,6 +471,40 @@ export default {
 			}
 		}
 
+		// Budgets API
+		if (url.pathname === '/api/budgets' && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const budgets = await env.DB.prepare('SELECT * FROM budgets WHERE user_id = ?').bind(currentUser.user_id).all();
+				const results = [];
+				for (const budget of budgets.results as any[]) {
+					const spent = await env.DB.prepare("SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND category = ? AND type = 'expense' AND date >= ?").bind(currentUser.user_id, budget.category, budget.start_date).first();
+					results.push({
+						...budget,
+						spent: spent?.total || 0
+					});
+				}
+				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		if (url.pathname === '/api/budgets' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const { id, category, amount, period, project_id, start_date } = await request.json();
+				if (id) {
+					await env.DB.prepare('UPDATE budgets SET category=?, amount=?, period=?, project_id=?, start_date=? WHERE id=? AND user_id=?').bind(category, amount, period, project_id || null, start_date, id, currentUser.user_id).run();
+				} else {
+					await env.DB.prepare('INSERT INTO budgets (user_id, category, amount, period, project_id, start_date) VALUES (?, ?, ?, ?, ?, ?)').bind(currentUser.user_id, category, amount, period, project_id || null, start_date).run();
+				}
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
 		// Single Item APIs
 		const invoiceMatch = url.pathname.match(/^\/api\/invoices\/(\d+)$/);
 		if (invoiceMatch && request.method === 'GET') {
@@ -452,6 +613,58 @@ export default {
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+
+		// Receipts Status Update API
+		const receiptStatusMatch = url.pathname.match(/^\/api\/receipts\/(\d+)\/status$/);
+		if (receiptStatusMatch && request.method === 'PATCH') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const receiptId = receiptStatusMatch[1];
+				const { status } = await request.json();
+				const allowedStatuses = ['draft', 'sent', 'paid', 'refunded', 'cancelled'];
+
+				if (!allowedStatuses.includes(status)) {
+					return new Response(JSON.stringify({ error: 'Invalid status' }), { status: 400 });
+				}
+
+				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
+				if (!receipt) return new Response('Receipt not found', { status: 404 });
+
+				await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ? AND user_id = ?').bind(status, receiptId, currentUser.user_id).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// Receipt PDF Generation
+		const receiptPdfMatch = url.pathname.match(/^\/api\/receipts\/(\d+)\/pdf$/);
+		if (receiptPdfMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+
+			try {
+				const receiptId = receiptPdfMatch[1];
+				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
+				if (!receipt) return new Response('Receipt not found', { status: 404 });
+
+				const company = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(receipt.company_id).first();
+				const client = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(receipt.client_id).first();
+				const project = receipt.project_id ? await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(receipt.project_id).first() : null;
+
+				const pdfBytes = await generateProfessionalReceiptPDF(receipt, company, client, project, env);
+
+				return new Response(pdfBytes, {
+					headers: {
+						'Content-Type': 'application/pdf',
+						'Content-Disposition': `inline; filename="Receipt-${receipt.id}.pdf"`,
+					},
+				});
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -620,7 +833,7 @@ export default {
 		}
 
 		// Generic DELETE API
-		const deleteMatch = url.pathname.match(/^\/api\/(invoices|receipts|quotes|companies|clients|projects|transactions)\/(\d+)$/);
+		const deleteMatch = url.pathname.match(/^\/api\/(invoices|receipts|quotes|companies|clients|projects|transactions|budgets)\/(\d+)$/);
 		if (deleteMatch && request.method === 'DELETE') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
@@ -734,6 +947,30 @@ export default {
 			}
 		}
 
+		// Invoice Status Update API
+		const invoiceStatusMatch = url.pathname.match(/^\/api\/invoices\/(\d+)\/status$/);
+		if (invoiceStatusMatch && request.method === 'PATCH') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const invoiceId = invoiceStatusMatch[1];
+				const { status } = await request.json();
+				const allowedStatuses = ['draft', 'sent', 'paid', 'overdue'];
+
+				if (!allowedStatuses.includes(status)) {
+					return new Response(JSON.stringify({ error: 'Invalid status' }), { status: 400 });
+				}
+
+				const invoice = await env.DB.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').bind(invoiceId, currentUser.user_id).first();
+				if (!invoice) return new Response('Invoice not found', { status: 404 });
+
+				await env.DB.prepare('UPDATE invoices SET status = ? WHERE id = ? AND user_id = ?').bind(status, invoiceId, currentUser.user_id).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
 		// PDF Generation
 		const pdfMatch = url.pathname.match(/^\/api\/quotes\/(\d+)\/pdf$/);
 		if (pdfMatch && request.method === 'GET') {
@@ -783,6 +1020,234 @@ export default {
 						'Content-Disposition': `inline; filename="Invoice-${invoice.id}.pdf"`,
 					},
 				});
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+
+		// Project Management API
+
+		// 1. Project Details (Comprehensive Fetch)
+		if (url.pathname.match(/^\/api\/projects\/\d+\/details$/) && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const projectId = url.pathname.split('/')[3];
+
+			try {
+				const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, currentUser.user_id).first();
+				if (!project) return new Response('Project not found', { status: 404 });
+
+				let columns = await env.DB.prepare('SELECT * FROM project_columns WHERE project_id = ? ORDER BY position ASC').bind(projectId).all();
+
+				// Ensure default columns exist
+				if (columns.results.length === 0) {
+					const defaultColumns = ['Planned', 'In Progress', 'Blocked', 'Completed'];
+					for (let i = 0; i < defaultColumns.length; i++) {
+						await env.DB.prepare('INSERT INTO project_columns (project_id, title, position) VALUES (?, ?, ?)').bind(projectId, defaultColumns[i], i).run();
+					}
+					columns = await env.DB.prepare('SELECT * FROM project_columns WHERE project_id = ? ORDER BY position ASC').bind(projectId).all();
+				}
+
+				const tasks = await env.DB.prepare('SELECT * FROM tasks WHERE project_id = ?').bind(projectId).all();
+				// Fetch notes for tasks - simplified for now by adding a count or basic fetch, 
+				// but detailed notes might require separate calls or a join. 
+				// Let's fetch all notes for this project's tasks to optimize
+				const taskIds = tasks.results.map((t: any) => t.id).join(',');
+				const taskNotes = taskIds ? await env.DB.prepare(`SELECT * FROM task_notes WHERE task_id IN (${taskIds}) ORDER BY created_at DESC`).all() : { results: [] };
+
+				const milestones = await env.DB.prepare('SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC').bind(projectId).all();
+
+				const tickets = await env.DB.prepare('SELECT * FROM tickets WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all();
+				const ticketIds = tickets.results.map((t: any) => t.id).join(',');
+				const ticketNotes = ticketIds ? await env.DB.prepare(`SELECT * FROM ticket_notes WHERE ticket_id IN (${ticketIds}) ORDER BY created_at DESC`).all() : { results: [] };
+
+
+				return new Response(JSON.stringify({
+					project,
+					columns: columns.results,
+					tasks: tasks.results,
+					milestones: milestones.results,
+					tickets: tickets.results,
+					taskNotes: taskNotes.results,
+					ticketNotes: ticketNotes.results
+				}), {
+					headers: { 'Content-Type': 'application/json' }
+				});
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// 2. Columns
+		if (url.pathname === '/api/columns' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { project_id, title, position } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO project_columns (project_id, title, position) VALUES (?, ?, ?) RETURNING *')
+					.bind(project_id, title, position).first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/columns\/\d+$/) && request.method === 'PUT') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const columnId = url.pathname.split('/')[3];
+			const { title, position } = await request.json(); // Allow partial updates if needed, but for now simple
+			try {
+				if (title) await env.DB.prepare('UPDATE project_columns SET title = ? WHERE id = ?').bind(title, columnId).run();
+				if (position !== undefined) await env.DB.prepare('UPDATE project_columns SET position = ? WHERE id = ?').bind(position, columnId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/columns\/\d+$/) && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const columnId = url.pathname.split('/')[3];
+			try {
+				await env.DB.prepare('DELETE FROM project_columns WHERE id = ?').bind(columnId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+
+		// 3. Tasks
+		if (url.pathname === '/api/tasks' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { project_id, column_id, title, description, priority, due_date, assignee } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO tasks (project_id, column_id, title, description, priority, due_date, assignee) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *')
+					.bind(project_id, column_id, title, description || null, priority || 'medium', due_date || null, assignee || null).first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/tasks\/\d+$/) && request.method === 'PUT') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const taskId = url.pathname.split('/')[3];
+			const updates = await request.json();
+			const keys = Object.keys(updates);
+			const values = Object.values(updates);
+			const setClause = keys.map(k => `${k} = ?`).join(', ');
+
+			try {
+				await env.DB.prepare(`UPDATE tasks SET ${setClause} WHERE id = ?`).bind(...values, taskId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/tasks\/\d+$/) && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const taskId = url.pathname.split('/')[3];
+			try {
+				await env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(taskId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// 4. Milestones
+		if (url.pathname === '/api/milestones' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { project_id, title, due_date, status } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO milestones (project_id, title, due_date, status) VALUES (?, ?, ?, ?) RETURNING *')
+					.bind(project_id, title, due_date || null, status || 'pending').first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/milestones\/\d+$/) && request.method === 'PUT') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const milestoneId = url.pathname.split('/')[3];
+			const { title, due_date, status } = await request.json();
+			try {
+				if (title) await env.DB.prepare('UPDATE milestones SET title = ? WHERE id = ?').bind(title, milestoneId).run();
+				if (due_date) await env.DB.prepare('UPDATE milestones SET due_date = ? WHERE id = ?').bind(due_date, milestoneId).run();
+				if (status) await env.DB.prepare('UPDATE milestones SET status = ? WHERE id = ?').bind(status, milestoneId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/milestones\/\d+$/) && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const milestoneId = url.pathname.split('/')[3];
+			try {
+				await env.DB.prepare('DELETE FROM milestones WHERE id = ?').bind(milestoneId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// 5. Tickets
+		if (url.pathname === '/api/tickets' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { project_id, title, description, priority, status } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO tickets (project_id, title, description, priority, status) VALUES (?, ?, ?, ?, ?) RETURNING *')
+					.bind(project_id, title, description || null, priority || 'medium', status || 'open').first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/tickets\/\d+$/) && request.method === 'PUT') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const ticketId = url.pathname.split('/')[3];
+			const updates = await request.json();
+			const keys = Object.keys(updates);
+			const values = Object.values(updates);
+			const setClause = keys.map(k => `${k} = ?`).join(', ');
+
+			try {
+				await env.DB.prepare(`UPDATE tickets SET ${setClause} WHERE id = ?`).bind(...values, ticketId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		if (url.pathname.match(/^\/api\/tickets\/\d+$/) && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const ticketId = url.pathname.split('/')[3];
+			try {
+				await env.DB.prepare('DELETE FROM tickets WHERE id = ?').bind(ticketId).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// 6. Notes API
+		// Task Notes
+		if (url.pathname === '/api/task-notes' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { task_id, content } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO task_notes (task_id, content) VALUES (?, ?) RETURNING *')
+					.bind(task_id, content).first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// Ticket Notes
+		if (url.pathname === '/api/ticket-notes' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+			const { ticket_id, content } = await request.json();
+			try {
+				const result = await env.DB.prepare('INSERT INTO ticket_notes (ticket_id, content) VALUES (?, ?) RETURNING *')
+					.bind(ticket_id, content).first();
+				return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}

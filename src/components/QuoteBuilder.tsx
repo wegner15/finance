@@ -9,6 +9,7 @@ import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import Copy from 'lucide-react/dist/esm/icons/copy';
 import Eye from 'lucide-react/dist/esm/icons/eye';
 import EyeOff from 'lucide-react/dist/esm/icons/eye-off';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface LineItem {
   id: string;
@@ -55,6 +56,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
   quoteId,
 }) => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [formData, setFormData] = useState<QuoteFormData>({
     title: initialData?.title || '',
     companyId: initialData?.companyId || '',
@@ -189,13 +191,17 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
       title: formData.title,
       company_id: formData.companyId,
       client_id: formData.clientId,
-      project_id: formData.projectId,
-      introduction: formData.introduction,
-      scope_summary: formData.scope,
+      project_id: formData.projectId || null, // Ensure null instead of empty string
+      introduction: formData.introduction || '',
+      scope_summary: formData.scope || '',
+      deliverables: '', // Optional field, send empty string
       validity_period: formData.validityDays,
-      notes: formData.terms,
+      conclusion: '', // Optional field, send empty string
+      notes: formData.terms || '',
+      amount: subtotal, // Required: total amount from line items
       items: JSON.stringify(formData.lineItems),
-      payment_terms: JSON.stringify(formData.paymentMilestones)
+      payment_terms: JSON.stringify(formData.paymentMilestones),
+      status: 'draft'
     };
 
     console.log('Sending POST request to /api/quotes');
@@ -211,15 +217,16 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
       console.log('Response status:', response.status);
       if (response.ok) {
         console.log('Success, redirecting to /quotes');
+        notify.success('Quote saved successfully');
         navigate('/quotes');
       } else {
         const text = await response.text();
         console.error('Failed to save quote:', text);
-        alert('Failed to save quote: ' + text);
+        notify.error('Failed to save quote');
       }
     } catch (error: any) {
       console.error('Error saving quote:', error);
-      alert('Error saving quote: ' + error.message);
+      notify.error('Error saving quote');
     }
   };
 
@@ -402,17 +409,14 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
         <Card className="border-0 shadow-lg border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-gray-900 dark:text-white">Line Items</CardTitle>
-            <div dangerouslySetInnerHTML={{
-              __html: `
-              <button
-                type="button"
-                onclick="addLineItemHandler()"
-                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                Add Item
-              </button>
-            `}} />
+            <Button
+              type="button"
+              onClick={addLineItem}
+              className="gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Item
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="line-items-container space-y-4">
@@ -559,17 +563,14 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
         <Card className="border-0 shadow-lg border-l-4 border-l-purple-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-gray-900 dark:text-white">Payment Milestones</CardTitle>
-            <div dangerouslySetInnerHTML={{
-              __html: `
-              <button
-                type="button"
-                onclick="addMilestoneHandler()"
-                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-purple-600 hover:bg-purple-700 text-white transition-colors cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                Add Milestone
-              </button>
-            `}} />
+            <Button
+              type="button"
+              onClick={addPaymentMilestone}
+              className="gap-2 bg-purple-600 hover:bg-purple-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Milestone
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="milestones-container space-y-4">
@@ -594,17 +595,14 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                       <h4 className="font-semibold text-gray-700 dark:text-gray-300">
                         Milestone {index + 1}
                       </h4>
-                      <div dangerouslySetInnerHTML={{
-                        __html: `
-                        <button
-                          type="button"
-                          onclick="deleteMilestone(this)"
-                          style="background-color: rgb(220, 38, 38); color: white;"
-                          class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-md hover:opacity-90 transition-colors cursor-pointer"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                        </button>
-                      `}} />
+                      <Button
+                        type="button"
+                        onClick={() => removePaymentMilestone(milestone.id)}
+                        size="sm"
+                        variant="destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

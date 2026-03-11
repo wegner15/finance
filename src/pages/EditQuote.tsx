@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import QuoteBuilder from '../components/QuoteBuilder';
 import Nav from '../components/Nav';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 const EditQuote: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const notify = useNotification();
   const [companies, setCompanies] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -55,6 +57,7 @@ const EditQuote: React.FC = () => {
           setInitialData(mappedData);
         } else {
           console.error("Failed to fetch quote");
+          notify.error("Failed to fetch quote");
           navigate('/quotes');
         }
       } catch (error) {

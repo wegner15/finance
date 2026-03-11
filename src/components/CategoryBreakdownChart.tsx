@@ -21,7 +21,7 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
 
   if (!data || data.length === 0) {
     return (
-      <Card className="shadow-lg">
+      <Card className="shadow-lg bg-white dark:bg-gray-800 border-none">
         <CardHeader className="bg-gradient-to-r from-green-500 to-teal-600 text-white">
           <CardTitle className="text-xl flex items-center">
             <Tags className="w-6 h-6 mr-2" />
@@ -49,7 +49,7 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
       textStyle: {
         color: '#374151',
       },
-      formatter: function(params: any) {
+      formatter: function (params: any) {
         const item = data[params.dataIndex];
         const net = item.income - item.expenses;
         return `
@@ -69,9 +69,10 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
       left: 'left',
       top: 'center',
       textStyle: {
+        color: '#9ca3af',
         fontSize: 11,
       },
-      formatter: function(name: string) {
+      formatter: function (name: string) {
         return name.length > 15 ? name.substring(0, 15) + '...' : name;
       },
     },
@@ -96,7 +97,7 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
             show: true,
             fontSize: 16,
             fontWeight: 'bold',
-            formatter: function(params: any) {
+            formatter: function (params: any) {
               return `${params.name}\n${params.percent}%`;
             },
           },
@@ -121,7 +122,7 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
   };
 
   return (
-    <Card className="shadow-lg">
+    <Card className="shadow-lg bg-white dark:bg-gray-800 border-0">
       <CardHeader className="bg-gradient-to-r from-green-500 to-teal-600 text-white">
         <CardTitle className="text-xl flex items-center">
           <Tags className="w-6 h-6 mr-2" />
@@ -129,58 +130,58 @@ const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({ data })
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="mb-4 text-sm text-gray-600">
+        <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
           <p>Understand your spending patterns by category. Click on segments for details.</p>
         </div>
-        
+
         <div className="mb-6">
-          <ReactECharts 
-            option={option} 
+          <ReactECharts
+            option={option}
             style={{ height: '400px' }}
             opts={{ renderer: 'svg' }}
           />
         </div>
-        
+
         <div className="space-y-3">
           {data.map((item, index) => {
             const net = item.income - item.expenses;
             const activityPercentage = (((item.income + item.expenses) / totalActivity) * 100).toFixed(1);
             const isProfit = net >= 0;
-            
+
             return (
-              <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow bg-gray-50/50 dark:bg-gray-700/50">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-gray-900">{item.category || 'Uncategorized'}</h3>
-                  <span className="text-sm font-semibold text-gray-500">{activityPercentage}% activity</span>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100">{item.category || 'Uncategorized'}</h3>
+                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{activityPercentage}% activity</span>
                 </div>
-                
+
                 <div className="grid grid-cols-3 gap-2 text-sm mb-2">
                   <div>
-                    <p className="text-xs text-gray-500">Income</p>
-                    <p className="font-semibold text-green-600">{formatCurrency(item.income)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Income</p>
+                    <p className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(item.income)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Expenses</p>
-                    <p className="font-semibold text-red-600">{formatCurrency(item.expenses)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expenses</p>
+                    <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(item.expenses)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Net</p>
-                    <p className={`font-semibold flex items-center ${isProfit ? 'text-green-700' : 'text-red-700'}`}>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Net</p>
+                    <p className={`font-semibold flex items-center ${isProfit ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
                       {isProfit ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
                       {formatCurrency(Math.abs(net))}
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Visual bar showing income vs expenses */}
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden flex">
-                  <div 
-                    className="bg-green-500" 
+                <div className="h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden flex">
+                  <div
+                    className="bg-green-500"
                     style={{ width: `${(item.income / (item.income + item.expenses)) * 100}%` }}
                     title={`Income: ${formatCurrency(item.income)}`}
                   ></div>
-                  <div 
-                    className="bg-red-500" 
+                  <div
+                    className="bg-red-500"
                     style={{ width: `${(item.expenses / (item.income + item.expenses)) * 100}%` }}
                     title={`Expenses: ${formatCurrency(item.expenses)}`}
                   ></div>

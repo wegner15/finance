@@ -10,6 +10,7 @@ import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import Nav from '../components/Nav';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 const DEFAULT_CATEGORIES = [
   'Consulting',
@@ -28,6 +29,7 @@ const DEFAULT_CATEGORIES = [
 
 const NewTransaction: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
 
@@ -35,7 +37,10 @@ const NewTransaction: React.FC = () => {
     fetch('/api/projects')
       .then((res) => res.json())
       .then(setProjects)
-      .catch((err) => console.error('Error fetching projects:', err));
+      .catch((err) => {
+        console.error('Error fetching projects:', err);
+        notify.error('Failed to load projects');
+      });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -62,14 +67,15 @@ const NewTransaction: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Transaction created successfully');
         navigate('/transactions');
       } else {
         const errorData = await response.json();
-        alert('Failed to create transaction: ' + errorData.error);
+        notify.error('Failed to create transaction: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error creating transaction:', error);
-      alert('Error creating transaction');
+      notify.error('Error creating transaction');
     } finally {
       setLoading(false);
     }

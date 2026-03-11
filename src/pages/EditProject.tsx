@@ -7,9 +7,11 @@ import Users from 'lucide-react/dist/esm/icons/users';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Nav from '../components/Nav';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 const EditProject: React.FC = () => {
     const navigate = useNavigate();
+    const notify = useNotification();
     const { id } = useParams();
     const [loading, setLoading] = useState(false);
     const [clients, setClients] = useState<any[]>([]);
@@ -30,10 +32,12 @@ const EditProject: React.FC = () => {
                     setProject(await projectRes.json());
                 } else {
                     console.error('Project not found');
+                    notify.error('Project not found');
                     navigate('/projects');
                 }
             } catch (err) {
                 console.error('Error fetching data:', err);
+                notify.error('Failed to load project data');
             }
         };
         fetchData();
@@ -61,14 +65,15 @@ const EditProject: React.FC = () => {
             });
 
             if (response.ok) {
+                notify.success('Project updated successfully');
                 navigate('/projects');
             } else {
                 const errorData = await response.json();
-                alert('Failed to update project: ' + errorData.error);
+                notify.error('Failed to update project: ' + errorData.error);
             }
         } catch (error) {
             console.error('Error updating project:', error);
-            alert('Error updating project');
+            notify.error('Error updating project');
         } finally {
             setLoading(false);
         }

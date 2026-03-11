@@ -11,7 +11,9 @@ import Folder from 'lucide-react/dist/esm/icons/folder';
 import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign';
 import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import Nav from '../components/Nav';
+import Nav from '../components/Nav';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface InvoiceItem {
   description: string;
@@ -23,6 +25,7 @@ interface InvoiceItem {
 const EditInvoice: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const notify = useNotification();
   const [companies, setCompanies] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -86,7 +89,7 @@ const EditInvoice: React.FC = () => {
           });
         } else {
           console.error("Failed to fetch invoice");
-          alert("Invoice not found");
+          notify.error("Invoice not found");
           navigate('/invoices');
         }
       } catch (error) {
@@ -150,11 +153,13 @@ const EditInvoice: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Invoice updated successfully');
         navigate('/invoices');
       } else {
-        console.error('Failed to update invoice');
+        notify.error('Failed to update invoice');
       }
     } catch (error) {
+      notify.error('Error submitting invoice');
       console.error('Error submitting invoice:', error);
     }
   };

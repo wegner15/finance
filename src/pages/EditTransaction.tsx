@@ -10,6 +10,7 @@ import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import Nav from '../components/Nav';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 const DEFAULT_CATEGORIES = [
   'Consulting',
@@ -38,6 +39,7 @@ interface TransactionData {
 
 const EditTransaction: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
@@ -58,10 +60,12 @@ const EditTransaction: React.FC = () => {
           setTransaction(await transactionRes.json());
         } else {
           console.error('Transaction not found');
+          notify.error('Transaction not found');
           navigate('/transactions');
         }
       } catch (err) {
         console.error('Error fetching data:', err);
+        notify.error('Failed to load transaction data');
       }
     };
     fetchData();
@@ -92,14 +96,15 @@ const EditTransaction: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Transaction updated successfully');
         navigate('/transactions');
       } else {
         const errorData = await response.json();
-        alert('Failed to update transaction: ' + errorData.error);
+        notify.error('Failed to update transaction: ' + errorData.error);
       }
     } catch (error) {
       console.error('Error updating transaction:', error);
-      alert('Error updating transaction');
+      notify.error('Error updating transaction');
     } finally {
       setLoading(false);
     }

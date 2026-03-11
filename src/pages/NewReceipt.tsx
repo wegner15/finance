@@ -12,6 +12,7 @@ import Plus from 'lucide-react/dist/esm/icons/plus';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import Nav from '../components/Nav';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ReceiptItem {
   description: string;
@@ -22,6 +23,7 @@ interface ReceiptItem {
 
 const NewReceipt: React.FC = () => {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [companies, setCompanies] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -112,11 +114,13 @@ const NewReceipt: React.FC = () => {
       });
 
       if (response.ok) {
+        notify.success('Receipt created successfully');
         navigate('/receipts');
       } else {
-        console.error('Failed to create receipt');
+        notify.error('Failed to create receipt');
       }
     } catch (error) {
+      notify.error('Error submitting receipt');
       console.error('Error submitting receipt:', error);
     }
   };

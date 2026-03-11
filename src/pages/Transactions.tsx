@@ -15,6 +15,8 @@ import ArrowDownCircle from 'lucide-react/dist/esm/icons/arrow-down-circle';
 import Wallet from 'lucide-react/dist/esm/icons/wallet';
 import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
+import { useNotification } from '../contexts/NotificationContext';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Transaction {
   id: number;
@@ -29,6 +31,8 @@ const Transactions: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const notify = useNotification();
+  const confirm = useConfirmation();
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -344,16 +348,25 @@ const Transactions: React.FC = () => {
                             variant="destructive"
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this transaction?')) return;
+                              const isConfirmed = await confirm.confirm({
+                                title: 'Delete Transaction',
+                                message: 'Are you sure you want to delete this transaction? This action cannot be undone.',
+                                variant: 'danger',
+                                confirmText: 'Delete',
+                              });
+
+                              if (!isConfirmed) return;
+
                               try {
                                 const res = await fetch(`/api/transactions/${transaction.id}`, { method: 'DELETE' });
                                 if (res.ok) {
                                   setTransactions(transactions.filter(t => t.id !== transaction.id));
+                                  notify.success('Transaction deleted successfully');
                                 } else {
-                                  alert('Failed to delete transaction');
+                                  notify.error('Failed to delete transaction');
                                 }
                               } catch (e) {
-                                alert('Error deleting transaction');
+                                notify.error('Error deleting transaction');
                               }
                             }}
                             className="h-8 px-3"
