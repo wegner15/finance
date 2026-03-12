@@ -6,6 +6,8 @@ import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Receipt from 'lucide-react/dist/esm/icons/receipt';
 import Quote from 'lucide-react/dist/esm/icons/quote';
 import Users from 'lucide-react/dist/esm/icons/users';
+import PiggyBank from 'lucide-react/dist/esm/icons/piggy-bank';
+import StickyNote from 'lucide-react/dist/esm/icons/sticky-note';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import Building from 'lucide-react/dist/esm/icons/building';
 import LogOut from 'lucide-react/dist/esm/icons/log-out';
@@ -59,6 +61,8 @@ const Nav: React.FC<NavProps> = () => {
     { href: '/receipts', label: 'Receipts', icon: Receipt },
     { href: '/quotes', label: 'Quotes', icon: Quote },
     { href: '/budgets', label: 'Budgets', icon: Wallet },
+    { href: '/savings', label: 'Savings', icon: PiggyBank },
+    { href: '/notes', label: 'Notes', icon: StickyNote },
     { href: '/profile', label: 'Profile', icon: User },
   ];
 

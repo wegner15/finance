@@ -13,18 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 
 const DEFAULT_CATEGORIES = [
-  'Consulting',
-  'Development',
-  'Design',
-  'Marketing',
-  'Hosting',
-  'Tools',
-  'Office',
-  'Travel',
-  'Utilities',
-  'Taxes',
-  'Salary',
-  'Other'
+  'Consulting', 'Development', 'Design', 'Marketing', 'Hosting', 'Tools', 'Office', 'Travel', 'Utilities', 'Taxes', 'Salary', 'Dining', 'Software', 'Rent', 'Supplies', 'Legal', 'Miscellaneous'
 ];
 
 const NewTransaction: React.FC = () => {
@@ -33,14 +22,20 @@ const NewTransaction: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
 
+  const [budgetCategories, setBudgetCategories] = useState<string[]>([]);
+  
   useEffect(() => {
-    fetch('/api/projects')
-      .then((res) => res.json())
-      .then(setProjects)
-      .catch((err) => {
-        console.error('Error fetching projects:', err);
-        notify.error('Failed to load projects');
-      });
+    Promise.all([
+      fetch('/api/projects').then(res => res.json()),
+      fetch('/api/budgets').then(res => res.json())
+    ]).then(([projectsData, budgetsData]) => {
+      setProjects(projectsData);
+      const uniqueBudgetCats = Array.from(new Set((budgetsData as any[]).map(b => b.category)));
+      setBudgetCategories(uniqueBudgetCats);
+    }).catch((err) => {
+      console.error('Error fetching data:', err);
+      notify.error('Failed to load form data');
+    });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -147,10 +142,14 @@ const NewTransaction: React.FC = () => {
                         required
                       />
                       <datalist id="categories">
+                        {budgetCategories.map((cat) => (
+                           <option key={`budget-${cat}`} value={cat}>{cat} (Budgeted)</option>
+                        ))}
                         {DEFAULT_CATEGORIES.map((category, index) => (
                           <option key={index} value={category} />
                         ))}
                       </datalist>
+                      <p className="text-xs text-gray-400 mt-1">Assign a category to track this expense against your budgets.</p>
                     </div>
                   </div>
                   <div className="space-y-2">

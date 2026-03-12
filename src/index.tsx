@@ -27,7 +27,7 @@ function parseCookie(header: string | null): Record<string, string> {
 }
 
 export default {
-	async fetch(request, env, ctx) {
+	async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
 		// 1. Run Migrations
 		try {
 			await env.DB.exec(`CREATE TABLE IF NOT EXISTS sessions (
@@ -143,7 +143,7 @@ export default {
 				console.error('Critical Error creating new tables:', e.message);
 			}
 
-		} catch (error) {
+		} catch (error: any) {
 			console.log('Migration error:', error);
 		}
 
@@ -357,7 +357,7 @@ export default {
 					})()
 				};
 				return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -376,7 +376,7 @@ export default {
 					ORDER BY i.id DESC
 				`).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -396,7 +396,7 @@ export default {
 					ORDER BY r.date DESC
 				`).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -415,7 +415,7 @@ export default {
 					ORDER BY q.created_at DESC
 				`).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -426,7 +426,7 @@ export default {
 			try {
 				const { results } = await env.DB.prepare('SELECT * FROM companies WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -437,7 +437,7 @@ export default {
 			try {
 				const { results } = await env.DB.prepare('SELECT * FROM clients WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -454,7 +454,7 @@ export default {
 					ORDER BY p.id DESC
 				`).bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -466,7 +466,7 @@ export default {
 			try {
 				const { results } = await env.DB.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC').bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -485,7 +485,7 @@ export default {
 					});
 				}
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -500,7 +500,7 @@ export default {
 					await env.DB.prepare('INSERT INTO budgets (user_id, category, amount, period, project_id, start_date) VALUES (?, ?, ?, ?, ?, ?)').bind(currentUser.user_id, category, amount, period, project_id || null, start_date).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -513,7 +513,7 @@ export default {
 				const invoice = await env.DB.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').bind(invoiceMatch[1], currentUser.user_id).first();
 				if (!invoice) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(invoice), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -525,7 +525,7 @@ export default {
 				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptMatch[1], currentUser.user_id).first();
 				if (!receipt) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(receipt), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -537,7 +537,7 @@ export default {
 				const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').bind(quoteMatch[1], currentUser.user_id).first();
 				if (!quote) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(quote), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -549,7 +549,7 @@ export default {
 				const company = await env.DB.prepare('SELECT * FROM companies WHERE id = ? AND user_id = ?').bind(companyMatch[1], currentUser.user_id).first();
 				if (!company) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(company), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -561,7 +561,7 @@ export default {
 				const client = await env.DB.prepare('SELECT * FROM clients WHERE id = ? AND user_id = ?').bind(clientMatch[1], currentUser.user_id).first();
 				if (!client) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(client), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -573,7 +573,42 @@ export default {
 				const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectMatch[1], currentUser.user_id).first();
 				if (!project) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(project), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const savingsGoalMatch = url.pathname.match(/^\/api\/savings-goals\/(\d+)$/);
+		if (savingsGoalMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const goal = await env.DB.prepare(`
+					SELECT g.*, COALESCE(SUM(c.amount), 0) as current_amount
+					FROM savings_goals g
+					LEFT JOIN savings_contributions c ON g.id = c.goal_id
+					WHERE g.id = ? AND g.user_id = ?
+					GROUP BY g.id
+				`).bind(savingsGoalMatch[1], currentUser.user_id).first();
+				if (!goal) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+				return new Response(JSON.stringify(goal), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const savingsHistoryMatch = url.pathname.match(/^\/api\/savings-goals\/(\d+)\/history$/);
+		if (savingsHistoryMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const history = await env.DB.prepare(`
+					SELECT c.*, t.description
+					FROM savings_contributions c
+					JOIN transactions t ON c.transaction_id = t.id
+					WHERE c.goal_id = ?
+					ORDER BY c.date DESC
+				`).bind(savingsHistoryMatch[1]).all();
+				return new Response(JSON.stringify(history.results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -585,7 +620,7 @@ export default {
 				const transaction = await env.DB.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').bind(transactionMatch[1], currentUser.user_id).first();
 				if (!transaction) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(transaction), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -612,7 +647,7 @@ export default {
                     `).bind(currentUser.user_id, client_id, company_id, project_id, due_date, items, amount, bank_name, account_name, account_number, swift_code, payment_instructions, status || 'pending', new Date().toISOString()).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -689,7 +724,7 @@ export default {
                     `).bind(currentUser.user_id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, new Date().toISOString()).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -714,7 +749,7 @@ export default {
                     `).bind(currentUser.user_id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status || 'draft', new Date().toISOString()).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -732,7 +767,7 @@ export default {
 					await env.DB.prepare('INSERT INTO companies (user_id, name, email, phone, address, logo_url) VALUES (?, ?, ?, ?, ?, ?)').bind(currentUser.user_id, name, email, phone, address, logo_url || '').run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -750,7 +785,7 @@ export default {
 					await env.DB.prepare('INSERT INTO clients (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)').bind(currentUser.user_id, name, email, phone, address).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -768,7 +803,7 @@ export default {
 					await env.DB.prepare('INSERT INTO projects (user_id, name, client_id, description) VALUES (?, ?, ?, ?)').bind(currentUser.user_id, name, client_id, description).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -786,11 +821,193 @@ export default {
 					await env.DB.prepare('INSERT INTO transactions (user_id, type, amount, category, date, description, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(currentUser.user_id, type, amount, category, date, description, project_id || null).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
 
+		// Savings Goals List API
+		if (url.pathname === '/api/savings-goals' && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const goals = await env.DB.prepare(`
+					SELECT g.*, COALESCE(SUM(c.amount), 0) as current_amount
+					FROM savings_goals g
+					LEFT JOIN savings_contributions c ON g.id = c.goal_id
+					WHERE g.user_id = ?
+					GROUP BY g.id
+				`).bind(currentUser.user_id).all();
+				return new Response(JSON.stringify(goals.results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// Savings Goals CUD API
+		if (url.pathname === '/api/savings-goals' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const data = await request.json();
+				const { id, name, target_amount, monthly_contribution, target_date } = data;
+
+				if (id) {
+					await env.DB.prepare('UPDATE savings_goals SET name=?, target_amount=?, monthly_contribution=?, target_date=? WHERE id=? AND user_id=?').bind(name, target_amount, monthly_contribution, target_date, id, currentUser.user_id).run();
+				} else {
+					await env.DB.prepare('INSERT INTO savings_goals (user_id, name, target_amount, monthly_contribution, target_date) VALUES (?, ?, ?, ?, ?)').bind(currentUser.user_id, name, target_amount, monthly_contribution, target_date).run();
+				}
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		// Savings Contributions API
+		const contributeMatch = url.pathname.match(/^\/api\/savings-goals\/(\d+)\/contribute$/);
+		if (contributeMatch && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const data = await request.json();
+				const { amount, date, description } = data;
+				const goalId = contributeMatch[1];
+
+				// 1. Create Transaction
+				const txResult = await env.DB.prepare(`
+					INSERT INTO transactions (user_id, type, amount, category, date, description)
+					VALUES (?, 'expense', ?, 'Savings', ?, ?)
+					RETURNING id
+				`).bind(currentUser.user_id, amount, date || new Date().toISOString(), description || `Saving for Goal ID: ${goalId}`).first();
+
+				const transactionId = (txResult as any).id;
+
+				// 2. Create Contribution Record
+				await env.DB.prepare(`
+					INSERT INTO savings_contributions (goal_id, transaction_id, amount, date)
+					VALUES (?, ?, ?, ?)
+				`).bind(goalId, transactionId, amount, date || new Date().toISOString()).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const savingsDeleteMatch = url.pathname.match(/^\/api\/savings-goals\/(\d+)$/);
+		if (savingsDeleteMatch && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				await env.DB.prepare('DELETE FROM savings_goals WHERE id = ? AND user_id = ?').bind(savingsDeleteMatch[1], currentUser.user_id).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+		const notesMatch = url.pathname.match(/^\/api\/notes$/);
+		if (notesMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const notes = await env.DB.prepare('SELECT * FROM notes WHERE user_id = ? ORDER BY updated_at DESC').bind(currentUser.user_id).all();
+				return new Response(JSON.stringify(notes.results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const noteDetailMatch = url.pathname.match(/^\/api\/notes\/(\d+)$/);
+		if (noteDetailMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const noteId = noteDetailMatch[1];
+				const note = await env.DB.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ?').bind(noteId, currentUser.user_id).first();
+				if (!note) return new Response(JSON.stringify({ error: 'Note not found' }), { status: 404 });
+
+				const attachments = await env.DB.prepare('SELECT * FROM note_attachments WHERE note_id = ?').bind(noteId).all();
+				return new Response(JSON.stringify({ ...note, attachments: attachments.results }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		if (url.pathname === '/api/notes' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const { id, title, content } = await request.json();
+				if (id) {
+					await env.DB.prepare('UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').bind(title, content, id, currentUser.user_id).run();
+					return new Response(JSON.stringify({ success: true, id }), { headers: { 'Content-Type': 'application/json' } });
+				} else {
+					const result = await env.DB.prepare('INSERT INTO notes (user_id, title, content) VALUES (?, ?, ?) RETURNING id').bind(currentUser.user_id, title, content).first();
+					return new Response(JSON.stringify({ success: true, id: (result as any).id }), { headers: { 'Content-Type': 'application/json' } });
+				}
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		if (noteDetailMatch && request.method === 'DELETE') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const noteId = noteDetailMatch[1];
+				// Get attachments to delete from R2
+				const attachments = await env.DB.prepare('SELECT file_key FROM note_attachments WHERE note_id = ?').bind(noteId).all();
+				for (const att of attachments.results) {
+					await env.BUCKET.delete(att.file_key as string);
+				}
+				await env.DB.prepare('DELETE FROM notes WHERE id = ? AND user_id = ?').bind(noteId, currentUser.user_id).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const attachmentUploadMatch = url.pathname.match(/^\/api\/notes\/(\d+)\/attachments$/);
+		if (attachmentUploadMatch && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const noteId = attachmentUploadMatch[1];
+				const formData = await request.formData();
+				const file = formData.get('file') as File;
+				if (!file) return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400 });
+
+				const fileKey = `notes/${noteId}/${Date.now()}-${file.name}`;
+				await env.BUCKET.put(fileKey, await file.arrayBuffer(), {
+					httpMetadata: { contentType: file.type }
+				});
+
+				await env.DB.prepare('INSERT INTO note_attachments (note_id, file_name, file_key, file_type, file_size) VALUES (?, ?, ?, ?, ?)').bind(noteId, file.name, fileKey, file.type, file.size).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const attachmentProxyMatch = url.pathname.match(/^\/api\/attachments\/(\d+)$/);
+		if (attachmentProxyMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const attachmentId = attachmentProxyMatch[1];
+				// Verify ownership via note
+				const attachment = await env.DB.prepare(`
+					SELECT a.* FROM note_attachments a
+					JOIN notes n ON a.note_id = n.id
+					WHERE a.id = ? AND n.user_id = ?
+				`).bind(attachmentId, currentUser.user_id).first();
+
+				if (!attachment) return new Response('Not Found', { status: 404 });
+
+				const object = await env.BUCKET.get(attachment.file_key as string);
+				if (!object) return new Response('File Not Found in Storage', { status: 404 });
+
+				return new Response(object.body, {
+					headers: {
+						'Content-Type': (attachment.file_type as string) || 'application/octet-stream',
+						'Content-Disposition': `inline; filename="${attachment.file_name}"`
+					}
+				});
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
 
 
 		// Profile API (Email & Password)
@@ -827,7 +1044,7 @@ export default {
 				}
 
 				return new Response(JSON.stringify({ error: 'Invalid request type' }), { status: 400 });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -841,7 +1058,7 @@ export default {
 				const id = deleteMatch[2];
 				await env.DB.prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).bind(id, currentUser.user_id).run();
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
-			} catch (error) {
+			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
@@ -1263,7 +1480,7 @@ export default {
 					return env.ASSETS.fetch(new URL('/index.html', request.url));
 				}
 				return assetResponse;
-			} catch (e) {
+			} catch (e: any) {
 				// Fallback for local dev or error
 				return env.ASSETS.fetch(new URL('/index.html', request.url));
 			}

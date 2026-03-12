@@ -5,6 +5,8 @@ import { Input } from '../components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { BudgetProgress } from '../components/BudgetProgress';
+import Nav from '../components/Nav';
+import { useConfirmation } from '../contexts/ConfirmationContext';
 
 interface Budget {
   id: number;
@@ -16,6 +18,7 @@ interface Budget {
 }
 
 const Budgets: React.FC = () => {
+  const confirm = useConfirmation();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState<number | null>(null);
@@ -27,8 +30,8 @@ const Budgets: React.FC = () => {
     start_date: new Date().toISOString().split('T')[0]
   });
 
-  const categories = [
-    'Dining', 'Travel', 'Utilities', 'Software', 'Rent', 'Supplies', 'Marketing', 'Legal', 'Consulting', 'Miscellaneous'
+  const DEFAULT_CATEGORIES = [
+    'Consulting', 'Development', 'Design', 'Marketing', 'Hosting', 'Tools', 'Office', 'Travel', 'Utilities', 'Taxes', 'Salary', 'Dining', 'Software', 'Rent', 'Supplies', 'Legal', 'Miscellaneous'
   ];
 
   const fetchBudgets = async () => {
@@ -75,7 +78,13 @@ const Budgets: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this budget?')) return;
+    const isConfirmed = await confirm.confirm({
+      title: 'Delete Budget',
+      message: 'Are you sure you want to delete this budget? This will permanently remove it from your records.',
+      variant: 'danger',
+      confirmText: 'Delete'
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`/api/budgets/${id}`, { method: 'DELETE' });
       if (res.ok) fetchBudgets();
@@ -84,19 +93,22 @@ const Budgets: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-8"><p>Loading budgets...</p></div>;
+  if (loading) return <div className="flex h-screen w-full items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center ">
-             <Settings2 className="mr-3 w-8 h-8 text-primary" />
-             Budget Management
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Set and track spending goals across categories.</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <Nav />
+      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center ">
+                 <Settings2 className="mr-3 w-8 h-8 text-primary" />
+                 Budget Management
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">Set and track spending goals across categories.</p>
+            </div>
+          </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Budget Form */}
@@ -111,19 +123,21 @@ const Budgets: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Category</label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(val) => setFormData({ ...formData, category: val })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                <div className="relative">
+                  <Input
+                    placeholder="e.g. Dining, Hosting"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    list="budget-categories"
+                    required
+                    className="dark:bg-gray-700"
+                  />
+                  <datalist id="budget-categories">
+                    {DEFAULT_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat} />
                     ))}
-                  </SelectContent>
-                </Select>
+                  </datalist>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -249,6 +263,8 @@ const Budgets: React.FC = () => {
               ))}
             </div>
           )}
+        </div>
+          </div>
         </div>
       </div>
     </div>

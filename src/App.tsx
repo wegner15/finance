@@ -32,6 +32,8 @@ const ViewQuote = lazy(() => import('./pages/ViewQuote'));
 const EditQuote = lazy(() => import('./pages/EditQuote'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Budgets = lazy(() => import('./pages/Budgets'));
+const Savings = lazy(() => import('./pages/Savings'));
+const Notes = lazy(() => import('./pages/Notes'));
 
 const App: React.FC = () => {
   return (
@@ -77,6 +79,8 @@ const App: React.FC = () => {
 
               <Route path="/profile" element={<Profile />} />
               <Route path="/budgets" element={<Budgets />} />
+              <Route path="/savings" element={<Savings />} />
+              <Route path="/notes" element={<Notes />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

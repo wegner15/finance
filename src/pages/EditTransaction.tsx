@@ -13,18 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 
 const DEFAULT_CATEGORIES = [
-  'Consulting',
-  'Development',
-  'Design',
-  'Marketing',
-  'Hosting',
-  'Tools',
-  'Office',
-  'Travel',
-  'Utilities',
-  'Taxes',
-  'Salary',
-  'Other'
+  'Consulting', 'Development', 'Design', 'Marketing', 'Hosting', 'Tools', 'Office', 'Travel', 'Utilities', 'Taxes', 'Salary', 'Dining', 'Software', 'Rent', 'Supplies', 'Legal', 'Miscellaneous'
 ];
 
 interface TransactionData {
@@ -44,17 +33,24 @@ const EditTransaction: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [transaction, setTransaction] = useState<TransactionData | null>(null);
+  const [budgetCategories, setBudgetCategories] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [projectsRes, transactionRes] = await Promise.all([
+        const [projectsRes, transactionRes, budgetsRes] = await Promise.all([
           fetch('/api/projects'),
           fetch(`/api/transactions/${id}`),
+          fetch('/api/budgets'),
         ]);
 
         if (projectsRes.ok) {
           setProjects(await projectsRes.json());
+        }
+        if (budgetsRes.ok) {
+          const budgets = await budgetsRes.json();
+          const uniqueBudgetCats = Array.from(new Set((budgets as any[]).map(b => b.category)));
+          setBudgetCategories(uniqueBudgetCats);
         }
         if (transactionRes.ok) {
           setTransaction(await transactionRes.json());
@@ -187,10 +183,14 @@ const EditTransaction: React.FC = () => {
                         defaultValue={transaction.category}
                       />
                       <datalist id="categories">
+                        {budgetCategories.map((cat) => (
+                           <option key={`budget-${cat}`} value={cat}>{cat} (Budgeted)</option>
+                        ))}
                         {DEFAULT_CATEGORIES.map((category, index) => (
                           <option key={index} value={category} />
                         ))}
                       </datalist>
+                      <p className="text-xs text-gray-400 mt-1">Assign a category to track this expense against your budgets.</p>
                     </div>
                   </div>
                   <div className="space-y-2">
