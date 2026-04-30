@@ -132,12 +132,7 @@ const Login: React.FC<LoginProps> = ({ error }) => {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
-          <p>
-            Don't have an account?{' '}
-            <a href="/register" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold transition-colors">
-              Sign up here
-            </a>
-          </p>
+          <p>Accounts are created by an administrator.</p>
         </div>
       </div>
     </div>

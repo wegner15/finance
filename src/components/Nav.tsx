@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Home from 'lucide-react/dist/esm/icons/home';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card';
@@ -17,15 +17,27 @@ import User from 'lucide-react/dist/esm/icons/user';
 import Menu from 'lucide-react/dist/esm/icons/menu';
 import X from 'lucide-react/dist/esm/icons/x';
 import Wallet from 'lucide-react/dist/esm/icons/wallet';
+import ChartColumn from 'lucide-react/dist/esm/icons/chart-column';
 import { Button } from './ui/button';
 
 interface NavProps {
   theme?: string;
 }
 
+type UserRole = 'expense' | 'admin' | 'project';
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  roles: UserRole[];
+};
+
 const Nav: React.FC<NavProps> = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   // Theme state management
   const [isDark, setIsDark] = useState(() => {
@@ -51,20 +63,51 @@ const Nav: React.FC<NavProps> = () => {
     setIsDark(!isDark);
   };
 
-  const navItems = [
-    { href: '/', label: 'Dashboard', icon: Home },
-    { href: '/companies', label: 'Companies', icon: Building },
-    { href: '/clients', label: 'Clients', icon: Users },
-    { href: '/projects', label: 'Projects', icon: Folder },
-    { href: '/transactions', label: 'Transactions', icon: CreditCard },
-    { href: '/invoices', label: 'Invoices', icon: FileText },
-    { href: '/receipts', label: 'Receipts', icon: Receipt },
-    { href: '/quotes', label: 'Quotes', icon: Quote },
-    { href: '/budgets', label: 'Budgets', icon: Wallet },
-    { href: '/savings', label: 'Savings', icon: PiggyBank },
-    { href: '/notes', label: 'Notes', icon: StickyNote },
-    { href: '/profile', label: 'Profile', icon: User },
+  useEffect(() => {
+    const loadUserRole = async () => {
+      try {
+        const response = await fetch('/api/me');
+        if (!response.ok) return;
+        const me = await response.json();
+        setCurrentRole(me.role || null);
+      } catch {
+        setCurrentRole(null);
+      } finally {
+        setRoleLoaded(true);
+      }
+    };
+
+    loadUserRole();
+  }, []);
+
+  const navItems: NavItem[] = [
+    { href: '/', label: 'Dashboard', icon: Home, roles: ['expense', 'project', 'admin'] },
+    { href: '/transactions', label: 'Transactions', icon: CreditCard, roles: ['expense', 'admin'] },
+    { href: '/receipts', label: 'Receipts', icon: Receipt, roles: ['expense', 'admin'] },
+    { href: '/budgets', label: 'Budgets', icon: Wallet, roles: ['expense', 'admin'] },
+    { href: '/savings', label: 'Savings', icon: PiggyBank, roles: ['expense', 'admin'] },
+    { href: '/statement-analysis', label: 'Statement Analysis', icon: ChartColumn, roles: ['expense', 'admin'] },
+    { href: '/notes', label: 'Notes', icon: StickyNote, roles: ['expense', 'project', 'admin'] },
+    { href: '/projects', label: 'Projects', icon: Folder, roles: ['project', 'admin'] },
+    { href: '/companies', label: 'Companies', icon: Building, roles: ['project', 'admin'] },
+    { href: '/clients', label: 'Clients', icon: Users, roles: ['project', 'admin'] },
+    { href: '/quotes', label: 'Quotes', icon: Quote, roles: ['project', 'admin'] },
+    { href: '/invoices', label: 'Invoices', icon: FileText, roles: ['project', 'admin'] },
+    { href: '/users', label: 'Users', icon: Users, roles: ['admin'] },
+    { href: '/profile', label: 'Profile', icon: User, roles: ['expense', 'project', 'admin'] },
   ];
+
+  const roleLabel = currentRole === 'admin'
+    ? 'Administrator'
+    : currentRole === 'project'
+      ? 'Project Workspace'
+      : currentRole === 'expense'
+        ? 'Expense Workspace'
+        : 'Loading workspace...';
+
+  const visibleNavItems = roleLoaded && currentRole
+    ? navItems.filter((item) => currentRole === 'admin' || item.roles.includes(currentRole))
+    : [];
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -84,12 +127,17 @@ const Nav: React.FC<NavProps> = () => {
       {/* Sidebar */}
       <nav className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-200 ease-in-out md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-center h-16 bg-primary text-primary-foreground">
-            <h1 className="text-lg font-bold">Accounting System</h1>
+          <div className="flex flex-col items-center justify-center h-16 bg-primary text-primary-foreground">
+            <h1 className="text-lg font-bold leading-none">Accounting System</h1>
+            <p className="text-xs opacity-90 mt-1">{roleLabel}</p>
           </div>
           <div className="flex-1 py-4 overflow-y-auto">
             <ul className="space-y-1 px-2">
-              {navItems.map((item) => {
+              {!roleLoaded ? (
+                <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">Loading menu...</li>
+              ) : visibleNavItems.length === 0 ? (
+                <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No menu items available.</li>
+              ) : visibleNavItems.map((item) => {
                 const isActive = location.pathname === item.href;
                 const Icon = item.icon;
                 return (

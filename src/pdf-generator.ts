@@ -244,7 +244,7 @@ export async function generateProfessionalQuotePDF(quote: any, company: any, cli
   const totalX = width - margin - 150;
   drawText('Total Amount:', totalX, y, fontBold, 12, colorDark);
 
-  const totalStr = `KSH ${subtotal.toLocaleString('en', { minimumFractionDigits: 2 })}`;
+  const totalStr = `${quote.currency || 'KSH'} ${subtotal.toLocaleString('en', { minimumFractionDigits: 2 })}`;
   const totalW = fontBold.widthOfTextAtSize(totalStr, 14);
 
   drawText(totalStr, width - margin - totalW, y - 20, fontBold, 14, colorPrimary);
@@ -276,7 +276,7 @@ export async function generateProfessionalQuotePDF(quote: any, company: any, cli
 
       // Calculated amount
       const milestoneAmount = (subtotal * milestone.percentage) / 100;
-      const amountText = `KSH ${milestoneAmount.toLocaleString('en', { minimumFractionDigits: 2 })}`;
+      const amountText = `${quote.currency || 'KSH'} ${milestoneAmount.toLocaleString('en', { minimumFractionDigits: 2 })}`;
       const amountW = fontBold.widthOfTextAtSize(amountText, 10);
       drawText(amountText, width - margin - amountW - 10, y, fontBold, 10, colorPrimary);
 

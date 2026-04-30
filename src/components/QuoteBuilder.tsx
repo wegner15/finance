@@ -36,6 +36,7 @@ interface QuoteFormData {
   paymentMilestones: PaymentMilestone[];
   terms: string;
   validityDays: number;
+  currency: string;
 }
 
 interface QuoteBuilderProps {
@@ -68,6 +69,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
     paymentMilestones: initialData?.paymentMilestones || [],
     terms: initialData?.terms || '',
     validityDays: initialData?.validityDays || 30,
+    currency: (initialData as any)?.currency || 'KSH',
   });
 
   const [showPreview, setShowPreview] = useState(false);
@@ -201,7 +203,8 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
       amount: subtotal, // Required: total amount from line items
       items: JSON.stringify(formData.lineItems),
       payment_terms: JSON.stringify(formData.paymentMilestones),
-      status: 'draft'
+      status: 'draft',
+      currency: formData.currency
     };
 
     console.log('Sending POST request to /api/quotes');
@@ -361,6 +364,25 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+                  Currency *
+                </label>
+                <select
+                  name="currency"
+                  value={formData.currency}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, currency: e.target.value }))
+                  }
+                  className="w-full h-11 px-3 rounded-md border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                >
+                  <option value="KSH">KSH (Kenya Shilling)</option>
+                  <option value="USD">USD (US Dollar)</option>
+                  <option value="EUR">EUR (Euro)</option>
+                  <option value="GBP">GBP (British Pound)</option>
+                </select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -501,7 +523,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
 
                         <div>
                           <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                            Rate (KSH) *
+                            Rate ({formData.currency}) *
                           </label>
                           <Input
                             type="number"
@@ -524,7 +546,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                             Total
                           </label>
                           <div className="h-10 flex items-center px-3 bg-gray-50 dark:bg-gray-800 rounded-md border-2 border-gray-200 dark:border-gray-700 font-semibold">
-                            KSH {calculateLineItemTotal(item).toLocaleString('en', {
+                            {formData.currency} {calculateLineItemTotal(item).toLocaleString('en', {
                               minimumFractionDigits: 2,
                             })}
                           </div>
@@ -543,7 +565,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                       <div className="flex justify-between items-center text-lg font-bold">
                         <span>Subtotal:</span>
                         <span className="text-green-600 dark:text-green-400">
-                          KSH {subtotal.toLocaleString('en', {
+                          {formData.currency} {subtotal.toLocaleString('en', {
                             minimumFractionDigits: 2,
                           })}
                         </span>
@@ -645,7 +667,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                             className="h-10"
                           />
                           <div className="h-10 flex items-center px-3 bg-gray-50 dark:bg-gray-800 rounded-md border-2 border-gray-200 dark:border-gray-700 font-semibold whitespace-nowrap">
-                            KSH {calculateMilestoneAmount(milestone.percentage).toLocaleString('en', {
+                            {formData.currency} {calculateMilestoneAmount(milestone.percentage).toLocaleString('en', {
                               minimumFractionDigits: 2,
                             })}
                           </div>
@@ -781,12 +803,12 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                             <td className="py-3 px-4">{item.description}</td>
                             <td className="text-right py-3 px-4">{item.quantity}</td>
                             <td className="text-right py-3 px-4">
-                              KSH {item.rate.toLocaleString('en', {
+                              {formData.currency} {item.rate.toLocaleString('en', {
                                 minimumFractionDigits: 2,
                               })}
                             </td>
                             <td className="text-right py-3 px-4 font-semibold">
-                              KSH {calculateLineItemTotal(item).toLocaleString('en', {
+                              {formData.currency} {calculateLineItemTotal(item).toLocaleString('en', {
                                 minimumFractionDigits: 2,
                               })}
                             </td>
@@ -797,7 +819,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                             Subtotal:
                           </td>
                           <td className="text-right py-3 px-4 text-green-600 dark:text-green-400">
-                            KSH {subtotal.toLocaleString('en', {
+                            {formData.currency} {subtotal.toLocaleString('en', {
                               minimumFractionDigits: 2,
                             })}
                           </td>
@@ -831,7 +853,7 @@ const QuoteBuilder: React.FC<QuoteBuilderProps> = ({
                             {milestone.percentage}%
                           </p>
                           <p className="text-green-600 dark:text-green-400 font-bold">
-                            KSH {calculateMilestoneAmount(milestone.percentage).toLocaleString('en', {
+                            {formData.currency} {calculateMilestoneAmount(milestone.percentage).toLocaleString('en', {
                               minimumFractionDigits: 2,
                             })}
                           </p>

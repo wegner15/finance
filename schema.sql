@@ -6,6 +6,8 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
+    salt TEXT,
+    role TEXT NOT NULL DEFAULT 'expense',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

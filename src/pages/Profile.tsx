@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -16,14 +16,26 @@ const Profile: React.FC<ProfileProps> = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [account, setAccount] = useState<{ email: string; name: string; role: string } | null>(null);
 
-  // Email Form State
-  const [currentEmail, setCurrentEmail] = useState(''); // Ideally fetched from user context/API usually, but here manually or prefilled if we had user context.
-  // For safe migration, I'll ask user to input current password for any change, as API requires.
-  // Actually API endpoint I wrote checks current password for BOTH email and password changes.
-  // But previous profile page had "Current Email" readOnly.
-  // I should fetch current user details if possible.
-  // I'll stick to input fields.
+  useEffect(() => {
+    const loadAccount = async () => {
+      try {
+        const response = await fetch('/api/me');
+        if (response.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+
+        const me = await response.json();
+        setAccount(me);
+      } catch {
+        setAccount(null);
+      }
+    };
+
+    loadAccount();
+  }, []);
 
   const handleEmailUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -252,11 +264,13 @@ const Profile: React.FC<ProfileProps> = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Account Type</h3>
-                  <p className="text-gray-900 dark:text-gray-100">Administrator</p>
+                  <p className="text-gray-900 dark:text-gray-100 capitalize">{account?.role || 'Unknown'}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Note</h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">To view your current email, please check the dashboard or logout and login again.</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    Current email: {account?.email || 'Loading...'}
+                  </p>
                 </div>
               </div>
             </CardContent>

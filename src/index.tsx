@@ -1,5 +1,9 @@
+import './shims';
+import * as pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs';
+(globalThis as any).pdfjsWorker = pdfjsWorker;
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { generateProfessionalQuotePDF, generateProfessionalInvoicePDF, generateProfessionalReceiptPDF } from './pdf-generator';
+import { processMpesaStatementUpload } from './lib/statement-processing';
 
 async function pbkdf2Hash(password: string, salt: string): Promise<string> {
 	const enc = new TextEncoder();
@@ -8,6 +12,15 @@ async function pbkdf2Hash(password: string, salt: string): Promise<string> {
 	const bytes = new Uint8Array(bits);
 	return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+type CurrentUser = {
+	user_id: number;
+	email: string;
+	name: string;
+	role: string;
+};
+
+const USER_ROLES = ['expense', 'admin', 'project'] as const;
 
 function generateSalt(): string {
 	const bytes = new Uint8Array(16);
@@ -30,23 +43,36 @@ export default {
 	async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
 		// 1. Run Migrations
 		try {
-			await env.DB.exec(`CREATE TABLE IF NOT EXISTS sessions (
-        token TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        expires_at TEXT NOT NULL
-      )`);
+			await env.DB.exec(`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL)`);
 			await env.DB.exec(`ALTER TABLE users ADD COLUMN salt TEXT`).catch(() => { });
+			await env.DB.exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'expense'`).catch(() => { });
+			await env.DB.exec(`UPDATE users SET role = COALESCE(role, 'expense')`).catch(() => { });
 
 			// Ensure admin exists
-			const admin = await env.DB.prepare('SELECT id, email FROM users WHERE id = 1').first();
+			const admin = await env.DB.prepare('SELECT id, email, role FROM users WHERE id = 1').first();
 			if (!admin) {
 				const salt = generateSalt();
 				const pwd = env.ADMIN_DEFAULT_PASSWORD || 'admin123';
 				const hash = await pbkdf2Hash(pwd, salt);
-				await env.DB.prepare('INSERT INTO users (id, email, password_hash, name, salt) VALUES (1, ?, ?, ?, ?)')
-					.bind('admin@bogingo.com', hash, 'Admin', salt).run();
-			} else if (admin.email !== 'admin@bogingo.com') {
-				await env.DB.prepare('UPDATE users SET email = ? WHERE id = 1').bind('admin@bogingo.com').run();
+				await env.DB.prepare('INSERT INTO users (id, email, password_hash, name, salt, role) VALUES (1, ?, ?, ?, ?, ?)')
+					.bind('admin@bogingo.com', hash, 'Admin', salt, 'admin').run();
+			} else {
+				const updates: string[] = [];
+				const values: any[] = [];
+
+				if (admin.email !== 'admin@bogingo.com') {
+					updates.push('email = ?');
+					values.push('admin@bogingo.com');
+				}
+
+				if (admin.role !== 'admin') {
+					updates.push('role = ?');
+					values.push('admin');
+				}
+
+				if (updates.length > 0) {
+					await env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = 1`).bind(...values).run();
+				}
 			}
 
 			// Schema updates (idempotent)
@@ -66,82 +92,32 @@ export default {
 				`ALTER TABLE quotes ADD COLUMN amount REAL;`,
 				`ALTER TABLE invoices ADD COLUMN company_id INTEGER;`,
 				`ALTER TABLE receipts ADD COLUMN company_id INTEGER;`,
-				`CREATE TABLE IF NOT EXISTS project_columns (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					position INTEGER NOT NULL
-				);`,
-				`CREATE TABLE IF NOT EXISTS tasks (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					column_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					description TEXT,
-					priority TEXT DEFAULT 'medium',
-					due_date TEXT,
-					assignee TEXT,
-					created_at TEXT DEFAULT CURRENT_TIMESTAMP
-				);`,
-				`CREATE TABLE IF NOT EXISTS milestones (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					due_date TEXT,
-					status TEXT DEFAULT 'pending'
-				);`,
-				`CREATE TABLE IF NOT EXISTS tickets (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					description TEXT,
-					priority TEXT DEFAULT 'medium',
-					status TEXT DEFAULT 'open',
-					created_at TEXT DEFAULT CURRENT_TIMESTAMP
-				);`
+				`CREATE TABLE IF NOT EXISTS project_columns (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, position INTEGER NOT NULL);`,
+				`CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, column_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, priority TEXT DEFAULT 'medium', due_date TEXT, assignee TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
+				`CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, due_date TEXT, status TEXT DEFAULT 'pending');`,
+				`CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, priority TEXT DEFAULT 'medium', status TEXT DEFAULT 'open', created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
+				`CREATE TABLE IF NOT EXISTS statement_uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'mpesa', file_key TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'processing', total_transactions INTEGER NOT NULL DEFAULT 0, categorized_transactions INTEGER NOT NULL DEFAULT 0, error_message TEXT, uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP, processed_at TEXT);`,
+				`CREATE TABLE IF NOT EXISTS statement_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, upload_id INTEGER NOT NULL, user_id INTEGER NOT NULL, external_ref TEXT, tx_date TEXT NOT NULL, description TEXT NOT NULL, amount REAL NOT NULL, direction TEXT CHECK(direction IN ('debit', 'credit')) NOT NULL, balance REAL, counterparty TEXT, raw_line TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
+				`CREATE TABLE IF NOT EXISTS transaction_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER NOT NULL, category TEXT NOT NULL, confidence REAL DEFAULT 0, method TEXT CHECK(method IN ('rule', 'ai', 'manual')) NOT NULL, reason TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
+				`CREATE TABLE IF NOT EXISTS category_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER NOT NULL, user_id INTEGER NOT NULL, previous_category TEXT, new_category TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
+				`CREATE INDEX IF NOT EXISTS idx_statement_uploads_user_id ON statement_uploads(user_id);`,
+				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_upload_id ON statement_transactions(upload_id);`,
+				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_user_id ON statement_transactions(user_id);`,
+				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_tx_date ON statement_transactions(tx_date);`,
+				`CREATE INDEX IF NOT EXISTS idx_transaction_categories_tx_id ON transaction_categories(transaction_id);`,
+				`CREATE INDEX IF NOT EXISTS idx_category_feedback_tx_id ON category_feedback(transaction_id);`,
+				`ALTER TABLE statement_transactions ADD COLUMN parent_id INTEGER;`,
+				`ALTER TABLE statement_transactions ADD COLUMN is_charge INTEGER DEFAULT 0;`,
+				`ALTER TABLE quotes ADD COLUMN currency TEXT DEFAULT 'KSH';`
 			];
 			for (const update of schemaUpdates) {
-				await env.DB.exec(update).catch((e) => console.log('Migration notice:', e.message));
+				await env.DB.exec(update).catch((e) => {
+					if (!e.message.includes('duplicate column name') && !e.message.includes('already exists')) {
+						console.log('Migration notice:', e.message);
+					}
+				});
 			}
 
-			// Explicitly create new tables with logging
-			try {
-				await env.DB.exec(`CREATE TABLE IF NOT EXISTS project_columns (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					position INTEGER NOT NULL
-				)`);
-				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tasks (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					column_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					description TEXT,
-					priority TEXT DEFAULT 'medium',
-					due_date TEXT,
-					assignee TEXT,
-					created_at TEXT DEFAULT CURRENT_TIMESTAMP
-				)`);
-				await env.DB.exec(`CREATE TABLE IF NOT EXISTS milestones (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					due_date TEXT,
-					status TEXT DEFAULT 'pending'
-				)`);
-				await env.DB.exec(`CREATE TABLE IF NOT EXISTS tickets (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					project_id INTEGER NOT NULL,
-					title TEXT NOT NULL,
-					description TEXT,
-					priority TEXT DEFAULT 'medium',
-					status TEXT DEFAULT 'open',
-					created_at TEXT DEFAULT CURRENT_TIMESTAMP
-				)`);
-			} catch (e: any) {
-				console.error('Critical Error creating new tables:', e.message);
-			}
 
 		} catch (error: any) {
 			console.log('Migration error:', error);
@@ -151,9 +127,9 @@ export default {
 		const cookies = parseCookie(request.headers.get('Cookie'));
 
 		// 2. Authentication
-		let currentUser: any = null;
+		let currentUser: CurrentUser | null = null;
 		if (cookies['session']) {
-			const session = await env.DB.prepare('SELECT s.user_id, u.email, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ?')
+			const session = await env.DB.prepare('SELECT s.user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ?')
 				.bind(cookies['session'], new Date().toISOString()).first();
 			if (session) currentUser = session;
 		}
@@ -161,10 +137,70 @@ export default {
 		// 3. API & Logic Handlers
 
 		// Auth Routes
+		if (url.pathname === '/api/me' && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			return new Response(JSON.stringify(currentUser), { headers: { 'Content-Type': 'application/json' } });
+		}
+
+		if (url.pathname === '/api/users' && request.method === 'GET') {
+			if (!currentUser || currentUser.role !== 'admin') {
+				return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+			}
+
+			try {
+				const { results } = await env.DB.prepare(`
+					SELECT id, email, name, role, created_at
+					FROM users
+					ORDER BY created_at ASC, id ASC
+				`).all();
+				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		if (url.pathname === '/api/users' && request.method === 'POST') {
+			if (!currentUser || currentUser.role !== 'admin') {
+				return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+			}
+
+			try {
+				const { name, email, password, role } = await request.json();
+				const normalizedEmail = String(email || '').trim().toLowerCase();
+				const normalizedRole = typeof role === 'string' && (USER_ROLES as readonly string[]).includes(role) ? role : 'expense';
+
+				if (!name || !String(name).trim()) {
+					return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (!normalizedEmail || !normalizedEmail.includes('@')) {
+					return new Response(JSON.stringify({ error: 'Valid email is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (!password || String(password).length < 6) {
+					return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
+				if (existing) {
+					return new Response(JSON.stringify({ error: 'Email already exists' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const salt = generateSalt();
+				const hash = await pbkdf2Hash(String(password), salt);
+				await env.DB.prepare('INSERT INTO users (email, password_hash, name, salt, role) VALUES (?, ?, ?, ?, ?)')
+					.bind(normalizedEmail, hash, String(name).trim(), salt, normalizedRole).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
 		if (url.pathname === '/login' && request.method === 'POST') {
 			// Legacy Form Post Login
 			const formData = await request.formData();
-			const email = formData.get('email') as string;
+			const email = String(formData.get('email') || '').trim().toLowerCase();
 			const password = formData.get('password') as string;
 			const user = await env.DB.prepare('SELECT id, email, password_hash, salt FROM users WHERE email = ?').bind(email).first();
 
@@ -194,7 +230,8 @@ export default {
 
 		if (url.pathname === '/api/login' && request.method === 'POST') {
 			const { email, password } = await request.json();
-			const user = await env.DB.prepare('SELECT id, email, password_hash, salt FROM users WHERE email = ?').bind(email).first();
+			const normalizedEmail = String(email || '').trim().toLowerCase();
+			const user = await env.DB.prepare('SELECT id, email, password_hash, salt FROM users WHERE email = ?').bind(normalizedEmail).first();
 			if (!user) return new Response(JSON.stringify({ error: 'Invalid credentials' }), { status: 401 });
 
 			const calc = await pbkdf2Hash(password, user.salt || '');
@@ -734,19 +771,19 @@ export default {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
 				const data = await request.json();
-				const { id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status } = data;
+				const { id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status, currency } = data;
 
 				if (id) {
 					await env.DB.prepare(`
                         UPDATE quotes
-                        SET client_id=?, company_id=?, project_id=?, title=?, introduction=?, scope_summary=?, deliverables=?, items=?, payment_terms=?, validity_period=?, conclusion=?, notes=?, amount=?, status=?
+                        SET client_id=?, company_id=?, project_id=?, title=?, introduction=?, scope_summary=?, deliverables=?, items=?, payment_terms=?, validity_period=?, conclusion=?, notes=?, amount=?, status=?, currency=?
                         WHERE id=? AND user_id=?
-                    `).bind(client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status || 'draft', id, currentUser.user_id).run();
+                    `).bind(client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status || 'draft', currency || 'KSH', id, currentUser.user_id).run();
 				} else {
 					await env.DB.prepare(`
-                        INSERT INTO quotes (user_id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `).bind(currentUser.user_id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status || 'draft', new Date().toISOString()).run();
+                        INSERT INTO quotes (user_id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status, created_at, currency)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `).bind(currentUser.user_id, client_id, company_id, project_id, title, introduction, scope_summary, deliverables, items, payment_terms, validity_period, conclusion, notes, amount, status || 'draft', new Date().toISOString(), currency || 'KSH').run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -901,6 +938,266 @@ export default {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 			}
 		}
+
+		if (url.pathname === '/api/statements/upload' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+
+			try {
+				const formData = await request.formData();
+				const file = formData.get('file') as File | null;
+				const password = String(formData.get('password') || '').trim();
+
+				if (!file) {
+					return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (!password) {
+					return new Response(JSON.stringify({ error: 'Statement password is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (file.size > 10 * 1024 * 1024) {
+					return new Response(JSON.stringify({ error: 'File too large. Maximum size is 10MB.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const fileName = file.name.toLowerCase();
+				const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf');
+				if (!isPdf) {
+					return new Response(JSON.stringify({ error: 'Only PDF statements are supported for now.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const fileKey = `statements/${currentUser.user_id}/${Date.now()}-${crypto.randomUUID()}-${file.name}`;
+				await env.BUCKET.put(fileKey, await file.arrayBuffer(), {
+					httpMetadata: { contentType: file.type || 'application/pdf' }
+				});
+
+				const uploadResult = await env.DB.prepare(`
+					INSERT INTO statement_uploads (user_id, source, file_key, status)
+					VALUES (?, 'mpesa', ?, 'processing')
+					RETURNING id, status, uploaded_at
+				`).bind(currentUser.user_id, fileKey).first() as any;
+
+				if (!uploadResult?.id) {
+					return new Response(JSON.stringify({ error: 'Failed to create upload record' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				ctx.waitUntil(processMpesaStatementUpload({
+					env,
+					uploadId: uploadResult.id,
+					userId: currentUser.user_id,
+					fileKey,
+					password
+				}));
+
+				return new Response(JSON.stringify({
+					success: true,
+					upload: {
+						id: uploadResult.id,
+						status: uploadResult.status,
+						uploaded_at: uploadResult.uploaded_at
+					}
+				}), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		if (url.pathname === '/api/statements' && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const uploads = await env.DB.prepare(`
+					SELECT id, source, status, total_transactions, categorized_transactions, error_message, uploaded_at, processed_at
+					FROM statement_uploads
+					WHERE user_id = ?
+					ORDER BY id DESC
+					LIMIT 50
+				`).bind(currentUser.user_id).all();
+
+				return new Response(JSON.stringify(uploads.results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		if (url.pathname === '/api/statements/reports' && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const from = url.searchParams.get('from');
+				const to = url.searchParams.get('to');
+				const whereParts = ['st.user_id = ?'];
+				const bindArgs: any[] = [currentUser.user_id];
+
+				if (from) {
+					whereParts.push('st.tx_date >= ?');
+					bindArgs.push(from);
+				}
+				if (to) {
+					whereParts.push('st.tx_date <= ?');
+					bindArgs.push(to);
+				}
+
+				const whereClause = whereParts.join(' AND ');
+
+				const spendingByCategory = await env.DB.prepare(`
+					SELECT
+						COALESCE(tc.category, 'Uncategorized') as category,
+						ROUND(SUM(st.amount), 2) as total,
+						COUNT(st.id) as transaction_count
+					FROM statement_transactions st
+					LEFT JOIN transaction_categories tc
+						ON tc.transaction_id = st.id AND tc.is_active = 1
+					WHERE ${whereClause} AND st.direction = 'debit'
+					GROUP BY COALESCE(tc.category, 'Uncategorized')
+					ORDER BY total DESC
+				`).bind(...bindArgs).all();
+
+				const monthlyTrend = await env.DB.prepare(`
+					SELECT
+						strftime('%Y-%m', st.tx_date) as month,
+						ROUND(SUM(CASE WHEN st.direction = 'credit' THEN st.amount ELSE 0 END), 2) as income,
+						ROUND(SUM(CASE WHEN st.direction = 'debit' THEN st.amount ELSE 0 END), 2) as expenses
+					FROM statement_transactions st
+					WHERE ${whereClause}
+					GROUP BY strftime('%Y-%m', st.tx_date)
+					ORDER BY month DESC
+					LIMIT 12
+				`).bind(...bindArgs).all();
+
+				const summary = await env.DB.prepare(`
+					SELECT
+						ROUND(SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END), 2) as total_income,
+						ROUND(SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END), 2) as total_expenses,
+						COUNT(*) as total_transactions
+					FROM statement_transactions st
+					WHERE ${whereClause}
+				`).bind(...bindArgs).first();
+
+				return new Response(JSON.stringify({
+					summary: summary || { total_income: 0, total_expenses: 0, total_transactions: 0 },
+					spendingByCategory: spendingByCategory.results || [],
+					monthlyTrend: (monthlyTrend.results || []).reverse()
+				}), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		const statementReprocessMatch = url.pathname.match(/^\/api\/statements\/(\d+)\/reprocess$/);
+		if (statementReprocessMatch && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const { password } = await request.json() as any;
+				if (!password) {
+					return new Response(JSON.stringify({ error: 'Password required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const upload = await env.DB.prepare('SELECT id, file_key FROM statement_uploads WHERE id = ? AND user_id = ?')
+					.bind(statementReprocessMatch[1], currentUser.user_id).first();
+
+				if (!upload) {
+					return new Response(JSON.stringify({ error: 'Statement upload not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				await env.DB.prepare("UPDATE statement_uploads SET status = 'processing', error_message = NULL WHERE id = ?").bind(upload.id).run();
+
+				ctx.waitUntil(processMpesaStatementUpload({
+					env,
+					uploadId: upload.id,
+					userId: currentUser.user_id,
+					fileKey: upload.file_key,
+					password
+				}));
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		const statementStatusMatch = url.pathname.match(/^\/api\/statements\/(\d+)\/status$/);
+		if (statementStatusMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const status = await env.DB.prepare(`
+					SELECT id, status, total_transactions, categorized_transactions, error_message, uploaded_at, processed_at
+					FROM statement_uploads
+					WHERE id = ? AND user_id = ?
+				`).bind(statementStatusMatch[1], currentUser.user_id).first();
+
+				if (!status) {
+					return new Response(JSON.stringify({ error: 'Statement upload not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		const statementTransactionsMatch = url.pathname.match(/^\/api\/statements\/(\d+)\/transactions$/);
+		if (statementTransactionsMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const upload = await env.DB.prepare('SELECT id FROM statement_uploads WHERE id = ? AND user_id = ?')
+					.bind(statementTransactionsMatch[1], currentUser.user_id).first();
+				if (!upload) {
+					return new Response(JSON.stringify({ error: 'Statement upload not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const txs = await env.DB.prepare(`
+					SELECT
+						st.*,
+						COALESCE(tc.category, 'Uncategorized') as category,
+						tc.confidence,
+						tc.method
+					FROM statement_transactions st
+					LEFT JOIN transaction_categories tc ON tc.transaction_id = st.id AND tc.is_active = 1
+					WHERE st.upload_id = ? AND st.user_id = ?
+					ORDER BY st.tx_date DESC, st.id DESC
+				`).bind(statementTransactionsMatch[1], currentUser.user_id).all();
+
+				return new Response(JSON.stringify(txs.results), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
+		const statementCategoryMatch = url.pathname.match(/^\/api\/statements\/transactions\/(\d+)\/category$/);
+		if (statementCategoryMatch && request.method === 'PATCH') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const { category, reason } = await request.json() as any;
+				const nextCategory = String(category || '').trim();
+				if (!nextCategory) {
+					return new Response(JSON.stringify({ error: 'Category is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const tx = await env.DB.prepare('SELECT id, user_id FROM statement_transactions WHERE id = ?')
+					.bind(statementCategoryMatch[1]).first() as any;
+				if (!tx || tx.user_id !== currentUser.user_id) {
+					return new Response(JSON.stringify({ error: 'Transaction not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const currentCategory = await env.DB.prepare('SELECT category FROM transaction_categories WHERE transaction_id = ? AND is_active = 1')
+					.bind(statementCategoryMatch[1]).first() as any;
+
+				await env.DB.prepare('UPDATE transaction_categories SET is_active = 0 WHERE transaction_id = ?')
+					.bind(statementCategoryMatch[1]).run();
+
+				await env.DB.prepare(`
+					INSERT INTO transaction_categories (transaction_id, category, confidence, method, reason, is_active)
+					VALUES (?, ?, 1, 'manual', ?, 1)
+				`).bind(statementCategoryMatch[1], nextCategory, reason || 'Manual override').run();
+
+				await env.DB.prepare(`
+					INSERT INTO category_feedback (transaction_id, user_id, previous_category, new_category)
+					VALUES (?, ?, ?, ?)
+				`).bind(statementCategoryMatch[1], currentUser.user_id, currentCategory?.category || null, nextCategory).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
 		const notesMatch = url.pathname.match(/^\/api\/notes$/);
 		if (notesMatch && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
@@ -1027,10 +1324,11 @@ export default {
 				}
 
 				if (type === 'email') {
-					if (!new_email || !new_email.includes('@')) {
+					const normalizedEmail = String(new_email || '').trim().toLowerCase();
+					if (!normalizedEmail || !normalizedEmail.includes('@')) {
 						return new Response(JSON.stringify({ error: 'Invalid email' }), { status: 400 });
 					}
-					await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(new_email, currentUser.user_id).run();
+					await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(normalizedEmail, currentUser.user_id).run();
 					return new Response(JSON.stringify({ success: 'email_updated' }), { headers: { 'Content-Type': 'application/json' } });
 				}
 

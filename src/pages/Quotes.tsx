@@ -20,6 +20,7 @@ interface Quote {
   created_at: string;
   sent_at?: string;
   accepted_at?: string;
+  currency?: string;
 }
 
 const Quotes: React.FC = () => {
@@ -165,7 +166,7 @@ const Quotes: React.FC = () => {
                         <TableCell className="font-medium text-gray-900 dark:text-gray-100">{quote.title}</TableCell>
                         <TableCell className="text-gray-900 dark:text-gray-100">{quote.client_name || '-'}</TableCell>
                         <TableCell className="text-gray-900 dark:text-gray-100">{quote.company_name || '-'}</TableCell>
-                        <TableCell className="text-gray-900 dark:text-gray-100">KSH {quote.amount ? quote.amount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</TableCell>
+                        <TableCell className="text-gray-900 dark:text-gray-100">{quote.currency || 'KSH'} {quote.amount ? quote.amount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(quote.status)}`}>
                             {quote.status || 'draft'}

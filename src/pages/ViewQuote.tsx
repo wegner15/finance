@@ -250,13 +250,13 @@ const ViewQuote: React.FC = () => {
                           <td className="p-2">{item.item}</td>
                           <td className="p-2">{item.description}</td>
                           <td className="p-2 text-right">{item.quantity}</td>
-                          <td className="p-2 text-right">KSH {item.rate.toLocaleString()}</td>
-                          <td className="p-2 text-right font-semibold">KSH {item.amount.toLocaleString()}</td>
+                          <td className="p-2 text-right">{quote.currency || 'KSH'} {item.rate.toLocaleString()}</td>
+                          <td className="p-2 text-right font-semibold">{quote.currency || 'KSH'} {item.amount.toLocaleString()}</td>
                         </tr>
                       ))}
                       <tr className="border-t-2 font-bold">
                         <td colSpan={5} className="p-2 text-right">Total:</td>
-                        <td className="p-2 text-right">KSH {calculateTotal().toLocaleString()}</td>
+                        <td className="p-2 text-right">{quote.currency || 'KSH'} {calculateTotal().toLocaleString()}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -281,7 +281,7 @@ const ViewQuote: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">{term.percentage}%</p>
-                        <p className="text-sm text-gray-600">KSH {term.amount.toLocaleString()}</p>
+                        <p className="text-sm text-gray-600">{quote.currency || 'KSH'} {term.amount.toLocaleString()}</p>
                         {term.due_date && (
                           <p className="text-xs text-gray-500">Due: {new Date(term.due_date).toLocaleDateString()}</p>
                         )}

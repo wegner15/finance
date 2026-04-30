@@ -31,9 +31,11 @@ const NewQuote = lazy(() => import('./pages/NewQuote'));
 const ViewQuote = lazy(() => import('./pages/ViewQuote'));
 const EditQuote = lazy(() => import('./pages/EditQuote'));
 const Profile = lazy(() => import('./pages/Profile'));
+const Users = lazy(() => import('./pages/Users'));
 const Budgets = lazy(() => import('./pages/Budgets'));
 const Savings = lazy(() => import('./pages/Savings'));
 const Notes = lazy(() => import('./pages/Notes'));
+const StatementAnalysis = lazy(() => import('./pages/StatementAnalysis'));
 
 const App: React.FC = () => {
   return (
@@ -43,6 +45,7 @@ const App: React.FC = () => {
           <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Navigate to="/login" replace />} />
 
               <Route path="/" element={<Dashboard />} />
 
@@ -78,9 +81,11 @@ const App: React.FC = () => {
               <Route path="/quotes/:id/edit" element={<EditQuote />} />
 
               <Route path="/profile" element={<Profile />} />
+              <Route path="/users" element={<Users />} />
               <Route path="/budgets" element={<Budgets />} />
               <Route path="/savings" element={<Savings />} />
               <Route path="/notes" element={<Notes />} />
+              <Route path="/statement-analysis" element={<StatementAnalysis />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
