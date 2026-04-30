@@ -133,6 +133,7 @@ export default {
 				.bind(cookies['session'], new Date().toISOString()).first();
 			if (session) currentUser = session;
 		}
+		const isAdmin = currentUser?.role === 'admin';
 
 		// 3. API & Logic Handlers
 
@@ -423,7 +424,7 @@ export default {
 		if (url.pathname === '/api/receipts' && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const { results } = await env.DB.prepare(`
+				const query = isAdmin ? `
 					SELECT r.*,
 						   c.name as client_name,
 						   comp.name as company_name
@@ -431,7 +432,18 @@ export default {
 					LEFT JOIN clients c ON r.client_id = c.id
 					LEFT JOIN companies comp ON r.company_id = comp.id
 					ORDER BY r.date DESC
-				`).all();
+				` : `
+					SELECT r.*,
+						   c.name as client_name,
+						   comp.name as company_name
+					FROM receipts r
+					LEFT JOIN clients c ON r.client_id = c.id
+					LEFT JOIN companies comp ON r.company_id = comp.id
+					WHERE r.user_id = ?
+					ORDER BY r.date DESC
+				`;
+				const stmt = env.DB.prepare(query);
+				const { results } = isAdmin ? await stmt.all() : await stmt.bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -461,7 +473,9 @@ export default {
 		if (url.pathname === '/api/companies' && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const { results } = await env.DB.prepare('SELECT * FROM companies WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
+				const { results } = isAdmin
+					? await env.DB.prepare('SELECT * FROM companies ORDER BY name ASC').all()
+					: await env.DB.prepare('SELECT * FROM companies WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -472,7 +486,9 @@ export default {
 		if (url.pathname === '/api/clients' && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const { results } = await env.DB.prepare('SELECT * FROM clients WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
+				const { results } = isAdmin
+					? await env.DB.prepare('SELECT * FROM clients ORDER BY name ASC').all()
+					: await env.DB.prepare('SELECT * FROM clients WHERE user_id = ? ORDER BY name ASC').bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -483,13 +499,20 @@ export default {
 		if (url.pathname === '/api/projects' && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const { results } = await env.DB.prepare(`
+				const query = isAdmin ? `
+					SELECT p.*, c.name as client_name
+					FROM projects p
+					LEFT JOIN clients c ON p.client_id = c.id
+					ORDER BY p.id DESC
+				` : `
 					SELECT p.*, c.name as client_name
 					FROM projects p
 					LEFT JOIN clients c ON p.client_id = c.id
 					WHERE p.user_id = ?
 					ORDER BY p.id DESC
-				`).bind(currentUser.user_id).all();
+				`;
+				const stmt = env.DB.prepare(query);
+				const { results } = isAdmin ? await stmt.all() : await stmt.bind(currentUser.user_id).all();
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -559,7 +582,9 @@ export default {
 		if (receiptMatch && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptMatch[1], currentUser.user_id).first();
+				const receipt = isAdmin
+					? await env.DB.prepare('SELECT * FROM receipts WHERE id = ?').bind(receiptMatch[1]).first()
+					: await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptMatch[1], currentUser.user_id).first();
 				if (!receipt) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(receipt), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -583,7 +608,9 @@ export default {
 		if (companyMatch && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const company = await env.DB.prepare('SELECT * FROM companies WHERE id = ? AND user_id = ?').bind(companyMatch[1], currentUser.user_id).first();
+				const company = isAdmin
+					? await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(companyMatch[1]).first()
+					: await env.DB.prepare('SELECT * FROM companies WHERE id = ? AND user_id = ?').bind(companyMatch[1], currentUser.user_id).first();
 				if (!company) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(company), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -595,7 +622,9 @@ export default {
 		if (clientMatch && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const client = await env.DB.prepare('SELECT * FROM clients WHERE id = ? AND user_id = ?').bind(clientMatch[1], currentUser.user_id).first();
+				const client = isAdmin
+					? await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(clientMatch[1]).first()
+					: await env.DB.prepare('SELECT * FROM clients WHERE id = ? AND user_id = ?').bind(clientMatch[1], currentUser.user_id).first();
 				if (!client) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(client), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -607,7 +636,9 @@ export default {
 		if (projectMatch && request.method === 'GET') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
-				const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectMatch[1], currentUser.user_id).first();
+				const project = isAdmin
+					? await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectMatch[1]).first()
+					: await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectMatch[1], currentUser.user_id).first();
 				if (!project) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 				return new Response(JSON.stringify(project), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -703,10 +734,16 @@ export default {
 					return new Response(JSON.stringify({ error: 'Invalid status' }), { status: 400 });
 				}
 
-				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
+				const receipt = isAdmin
+					? await env.DB.prepare('SELECT * FROM receipts WHERE id = ?').bind(receiptId).first()
+					: await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
 				if (!receipt) return new Response('Receipt not found', { status: 404 });
 
-				await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ? AND user_id = ?').bind(status, receiptId, currentUser.user_id).run();
+				if (isAdmin) {
+					await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ?').bind(status, receiptId).run();
+				} else {
+					await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ? AND user_id = ?').bind(status, receiptId, currentUser.user_id).run();
+				}
 
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -721,12 +758,26 @@ export default {
 
 			try {
 				const receiptId = receiptPdfMatch[1];
-				const receipt = await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
+				const receipt = isAdmin
+					? await env.DB.prepare('SELECT * FROM receipts WHERE id = ?').bind(receiptId).first()
+					: await env.DB.prepare('SELECT * FROM receipts WHERE id = ? AND user_id = ?').bind(receiptId, currentUser.user_id).first();
 				if (!receipt) return new Response('Receipt not found', { status: 404 });
 
-				const company = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(receipt.company_id).first();
-				const client = await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(receipt.client_id).first();
-				const project = receipt.project_id ? await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(receipt.project_id).first() : null;
+				const company = receipt.company_id
+					? (isAdmin
+						? await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(receipt.company_id).first()
+						: await env.DB.prepare('SELECT * FROM companies WHERE id = ? AND user_id = ?').bind(receipt.company_id, currentUser.user_id).first())
+					: null;
+				const client = receipt.client_id
+					? (isAdmin
+						? await env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(receipt.client_id).first()
+						: await env.DB.prepare('SELECT * FROM clients WHERE id = ? AND user_id = ?').bind(receipt.client_id, currentUser.user_id).first())
+					: null;
+				const project = receipt.project_id
+					? (isAdmin
+						? await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(receipt.project_id).first()
+						: await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(receipt.project_id, currentUser.user_id).first())
+					: null;
 
 				const pdfBytes = await generateProfessionalReceiptPDF(receipt, company, client, project, env);
 
@@ -749,11 +800,19 @@ export default {
 				const { id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items } = data;
 
 				if (id) {
-					await env.DB.prepare(`
+					const updateReceiptQuery = isAdmin ? `
+                        UPDATE receipts
+                        SET client_id=?, company_id=?, project_id=?, date=?, amount=?, payment_method=?, reference_number=?, notes=?, items=?
+                        WHERE id=?
+                    ` : `
                         UPDATE receipts
                         SET client_id=?, company_id=?, project_id=?, date=?, amount=?, payment_method=?, reference_number=?, notes=?, items=?
                         WHERE id=? AND user_id=?
-                    `).bind(client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, id, currentUser.user_id).run();
+                    `;
+					const updateArgs = isAdmin
+						? [client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, id]
+						: [client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, id, currentUser.user_id];
+					await env.DB.prepare(updateReceiptQuery).bind(...updateArgs).run();
 				} else {
 					await env.DB.prepare(`
                         INSERT INTO receipts (user_id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, created_at)
@@ -1354,7 +1413,11 @@ export default {
 			try {
 				const table = deleteMatch[1];
 				const id = deleteMatch[2];
-				await env.DB.prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).bind(id, currentUser.user_id).run();
+				if (isAdmin) {
+					await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+				} else {
+					await env.DB.prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).bind(id, currentUser.user_id).run();
+				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });

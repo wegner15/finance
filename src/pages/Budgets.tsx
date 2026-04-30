@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Pencil, Calendar, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, Calendar, Settings2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -21,6 +21,7 @@ const Budgets: React.FC = () => {
   const confirm = useConfirmation();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     id: null as number | null,
@@ -52,6 +53,8 @@ const Budgets: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const res = await fetch('/api/budgets', {
         method: 'POST',
@@ -74,6 +77,8 @@ const Budgets: React.FC = () => {
       }
     } catch (e) {
       console.error('Failed to save budget', e);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -185,14 +190,20 @@ const Budgets: React.FC = () => {
               </div>
 
               <div className="pt-4 flex gap-3">
-                <Button type="submit" className="flex-1">
-                  {formData.id ? 'Update Budget' : 'Create Budget'}
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {formData.id ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : formData.id ? 'Update Budget' : 'Create Budget'}
                 </Button>
                 {formData.id && (
                   <Button 
                     type="button" 
                     variant="outline" 
                     onClick={() => setFormData({ id: null, category: '', amount: '', period: 'monthly', start_date: new Date().toISOString().split('T')[0] })}
+                    disabled={isSubmitting}
                   >
                     Cancel
                   </Button>

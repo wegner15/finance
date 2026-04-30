@@ -10,6 +10,7 @@ import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import Plus from 'lucide-react/dist/esm/icons/plus';
 import History from 'lucide-react/dist/esm/icons/history';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
 import Nav from '../components/Nav';
 import { useNotification } from '../contexts/NotificationContext';
 import { useConfirmation } from '../contexts/ConfirmationContext';
@@ -35,6 +36,8 @@ const SavingsGoals: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedGoal, setSelectedGoal] = useState<number | null>(null);
   const [history, setHistory] = useState<Contribution[]>([]);
+  const [creatingGoal, setCreatingGoal] = useState(false);
+  const [contributing, setContributing] = useState(false);
   const notify = useNotification();
   const confirm = useConfirmation();
 
@@ -49,6 +52,26 @@ const SavingsGoals: React.FC = () => {
     amount: '',
     description: ''
   });
+
+  const getEstimatedMonths = (goal: SavingsGoal) => {
+    const now = new Date();
+    const targetDate = goal.target_date ? new Date(goal.target_date) : null;
+    const remaining = Math.max(goal.target_amount - goal.current_amount, 0);
+
+    if (targetDate && !Number.isNaN(targetDate.getTime())) {
+      const diffMs = targetDate.getTime() - now.getTime();
+      if (diffMs <= 0) return 0;
+
+      const months = diffMs / (1000 * 60 * 60 * 24 * 30.4375);
+      return Math.max(1, Math.ceil(months));
+    }
+
+    if (goal.monthly_contribution > 0) {
+      return Math.max(1, Math.ceil(remaining / goal.monthly_contribution));
+    }
+
+    return null;
+  };
 
   const fetchGoals = async () => {
     try {
@@ -82,6 +105,8 @@ const SavingsGoals: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingGoal) return;
+    setCreatingGoal(true);
     try {
       const res = await fetch('/api/savings-goals', {
         method: 'POST',
@@ -100,12 +125,16 @@ const SavingsGoals: React.FC = () => {
       }
     } catch (e) {
       notify.error('Failed to create goal');
+    } finally {
+      setCreatingGoal(false);
     }
   };
 
   const handleContribute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedGoal) return;
+    if (contributing) return;
+    setContributing(true);
     try {
       const res = await fetch(`/api/savings-goals/${selectedGoal}/contribute`, {
         method: 'POST',
@@ -124,6 +153,8 @@ const SavingsGoals: React.FC = () => {
       }
     } catch (e) {
       notify.error('Failed to record contribution');
+    } finally {
+      setContributing(false);
     }
   };
 
@@ -208,9 +239,22 @@ const SavingsGoals: React.FC = () => {
                       onChange={e => setFormData({ ...formData, target_date: e.target.value })}
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white mt-4">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Goal
+                  <Button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white mt-4"
+                    disabled={creatingGoal}
+                  >
+                    {creatingGoal ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Goal
+                      </>
+                    )}
                   </Button>
                 </form>
               </CardContent>
@@ -228,7 +272,7 @@ const SavingsGoals: React.FC = () => {
                 goals.map(goal => {
                   const progress = (goal.current_amount / goal.target_amount) * 100;
                   const remaining = goal.target_amount - goal.current_amount;
-                  const monthsRemaining = goal.monthly_contribution > 0 ? Math.ceil(remaining / goal.monthly_contribution) : null;
+                  const monthsRemaining = getEstimatedMonths(goal);
 
                   return (
                     <Card 
@@ -278,7 +322,13 @@ const SavingsGoals: React.FC = () => {
                             <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg border border-emerald-100 dark:border-emerald-800">
                               <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-1 uppercase tracking-wider">Estimated Time</p>
                               <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
-                                {monthsRemaining ? `${monthsRemaining} months` : 'N/A'}
+                                {monthsRemaining === null
+                                  ? 'N/A'
+                                  : monthsRemaining === 0
+                                    ? 'Due now'
+                                    : monthsRemaining === 1
+                                      ? '1 month'
+                                      : `${monthsRemaining} months`}
                               </p>
                             </div>
                           </div>
@@ -306,8 +356,19 @@ const SavingsGoals: React.FC = () => {
                                     value={contributeData.description}
                                     onChange={e => setContributeData({ ...contributeData, description: e.target.value })}
                                   />
-                                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                                    Contribute to Goal
+                                  <Button
+                                    type="submit"
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                                    disabled={contributing}
+                                  >
+                                    {contributing ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      'Contribute to Goal'
+                                    )}
                                   </Button>
                                 </form>
                               </div>
