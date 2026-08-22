@@ -9,7 +9,6 @@ import Phone from 'lucide-react/dist/esm/icons/phone';
 import MapPin from 'lucide-react/dist/esm/icons/map-pin';
 import Image from 'lucide-react/dist/esm/icons/image';
 import Image from 'lucide-react/dist/esm/icons/image';
-import Nav from '../components/Nav';
 import { useNotification } from '../contexts/NotificationContext';
 
 const NewCompany: React.FC = () => {
@@ -56,9 +55,8 @@ const NewCompany: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+    <div className="w-full">
+      <div className="w-full">
         <div className="max-w-3xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Add New Company</h1>

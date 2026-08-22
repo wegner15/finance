@@ -10,7 +10,6 @@ import Users from 'lucide-react/dist/esm/icons/users';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign';
 import Calendar from 'lucide-react/dist/esm/icons/calendar';
-import Nav from '../components/Nav';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -131,16 +130,15 @@ const NewInvoice: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
+      <div className="flex min-h-[50vh] w-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+    <div className="w-full">
+      <div className="w-full">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Create New Invoice</h1>

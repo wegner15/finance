@@ -19,12 +19,11 @@ import X from 'lucide-react/dist/esm/icons/x';
 import Wallet from 'lucide-react/dist/esm/icons/wallet';
 import ChartColumn from 'lucide-react/dist/esm/icons/chart-column';
 import { Button } from './ui/button';
+import { useUser, UserRole } from '../contexts/UserContext';
 
 interface NavProps {
   theme?: string;
 }
-
-type UserRole = 'expense' | 'admin' | 'project';
 
 type NavItem = {
   href: string;
@@ -36,8 +35,9 @@ type NavItem = {
 const Nav: React.FC<NavProps> = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
-  const [roleLoaded, setRoleLoaded] = useState(false);
+  const { user, loading: userLoading } = useUser();
+  const currentRole = user?.role || null;
+  const roleLoaded = !userLoading;
 
   // Theme state management
   const [isDark, setIsDark] = useState(() => {
@@ -62,23 +62,6 @@ const Nav: React.FC<NavProps> = () => {
   const toggleTheme = () => {
     setIsDark(!isDark);
   };
-
-  useEffect(() => {
-    const loadUserRole = async () => {
-      try {
-        const response = await fetch('/api/me');
-        if (!response.ok) return;
-        const me = await response.json();
-        setCurrentRole(me.role || null);
-      } catch {
-        setCurrentRole(null);
-      } finally {
-        setRoleLoaded(true);
-      }
-    };
-
-    loadUserRole();
-  }, []);
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Dashboard', icon: Home, roles: ['expense', 'project', 'admin'] },

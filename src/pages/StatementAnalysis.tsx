@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import Nav from '../components/Nav';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -227,8 +226,7 @@ const StatementAnalysis: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-cyan-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+      <div className="w-full">
         <div className="max-w-7xl mx-auto space-y-8">
           <div className="flex items-center justify-between">
             <div>

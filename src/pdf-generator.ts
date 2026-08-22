@@ -648,6 +648,7 @@ export async function generateProfessionalReceiptPDF(receipt: any, company: any,
   drawText(`#${receipt.id}`, width - margin - fontBold.widthOfTextAtSize(`#${receipt.id}`, 12), y, fontBold, 12, colorLightGray);
   y -= 25;
 
+  drawMeta('Type:', (receipt.receipt_type === 'incoming' ? 'INCOMING' : 'OUTGOING'));
   drawMeta('Date:', new Date(receipt.date).toLocaleDateString());
   if (project) drawMeta('Project:', project.name);
   if (receipt.payment_method) drawMeta('Payment Method:', receipt.payment_method);
@@ -658,12 +659,17 @@ export async function generateProfessionalReceiptPDF(receipt: any, company: any,
 
   // --- ADDRESSES ---
   const topAddressY = y;
+  const isIncomingReceipt = receipt.receipt_type === 'incoming';
 
   // From
   y = topAddressY;
-  drawText('FROM', margin, y, fontBold, 9, colorLightGray);
+  drawText(isIncomingReceipt ? 'MERCHANT' : 'FROM', margin, y, fontBold, 9, colorLightGray);
   y -= 15;
-  if (company) {
+  if (isIncomingReceipt) {
+    const merchantName = receipt.merchant_name || company?.name || 'Merchant';
+    drawText(merchantName, margin, y, fontBold, 11, colorDark);
+    y -= 15;
+  } else if (company) {
     drawText(company.name, margin, y, fontBold, 11, colorDark);
     y -= 15;
     const details = [company.email, company.phone, company.address].filter(Boolean);
@@ -673,19 +679,21 @@ export async function generateProfessionalReceiptPDF(receipt: any, company: any,
     });
   }
 
-  // To
-  y = topAddressY;
-  const rightColX = width / 2 + 20;
-  drawText('BILL TO', rightColX, y, fontBold, 9, colorLightGray);
-  y -= 15;
-  if (client) {
-    drawText(client.name, rightColX, y, fontBold, 11, colorDark);
+  if (!isIncomingReceipt) {
+    // To
+    y = topAddressY;
+    const rightColX = width / 2 + 20;
+    drawText('BILL TO', rightColX, y, fontBold, 9, colorLightGray);
     y -= 15;
-    const details = [client.email, client.phone, client.address].filter(Boolean);
-    details.forEach(d => {
-      drawText(d, rightColX, y, fontRegular, 10, colorDark);
-      y -= 14;
-    });
+    if (client) {
+      drawText(client.name, rightColX, y, fontBold, 11, colorDark);
+      y -= 15;
+      const details = [client.email, client.phone, client.address].filter(Boolean);
+      details.forEach(d => {
+        drawText(d, rightColX, y, fontRegular, 10, colorDark);
+        y -= 14;
+      });
+    }
   }
 
   y = Math.min(y, topAddressY - 80) - 40;

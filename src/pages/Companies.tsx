@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Building } from 'lucide-react';
-import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { useConfirmation } from '../contexts/ConfirmationContext';
@@ -49,7 +48,7 @@ const Companies: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
+      <div className="flex min-h-[50vh] w-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
@@ -57,16 +56,15 @@ const Companies: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex h-screen w-full items-center justify-center text-red-500">
+      <div className="flex min-h-[50vh] w-full items-center justify-center text-red-500">
         Error: {error}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+    <div className="w-full">
+      <div className="w-full">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Companies</h1>

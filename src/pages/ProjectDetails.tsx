@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import Nav from '../components/Nav';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useNotification } from '../contexts/NotificationContext';
@@ -60,8 +59,7 @@ const ProjectDetails: React.FC = () => {
     const { project, columns, tasks, milestones, tickets, taskNotes, ticketNotes } = projectData;
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-            <Nav />
+        <div className="w-full">
             <div className="ml-0 md:ml-64 p-8">
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{project.name}</h1>

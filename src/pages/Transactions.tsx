@@ -13,7 +13,6 @@ import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import ArrowUpCircle from 'lucide-react/dist/esm/icons/arrow-up-circle';
 import ArrowDownCircle from 'lucide-react/dist/esm/icons/arrow-down-circle';
 import Wallet from 'lucide-react/dist/esm/icons/wallet';
-import Nav from '../components/Nav';
 import { Link } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { useConfirmation } from '../contexts/ConfirmationContext';
@@ -115,7 +114,7 @@ const Transactions: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
+      <div className="flex min-h-[50vh] w-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
@@ -123,16 +122,15 @@ const Transactions: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex h-screen w-full items-center justify-center text-red-500">
+      <div className="flex min-h-[50vh] w-full items-center justify-center text-red-500">
         Error: {error}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+    <div className="w-full">
+      <div className="w-full">
         <div className="max-w-7xl mx-auto space-y-8">
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

@@ -4,6 +4,7 @@ import * as pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { generateProfessionalQuotePDF, generateProfessionalInvoicePDF, generateProfessionalReceiptPDF } from './pdf-generator';
 import { processMpesaStatementUpload } from './lib/statement-processing';
+import { processReceiptUpload, syncReceiptExpenseTransaction } from './lib/receipt-processing';
 
 async function pbkdf2Hash(password: string, salt: string): Promise<string> {
 	const enc = new TextEncoder();
@@ -28,6 +29,10 @@ function generateSalt(): string {
 	return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function sanitizeFileName(fileName: string): string {
+	return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
 function parseCookie(header: string | null): Record<string, string> {
 	const out: Record<string, string> = {};
 	if (!header) return out;
@@ -41,89 +46,22 @@ function parseCookie(header: string | null): Record<string, string> {
 
 export default {
 	async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
-		// 1. Run Migrations
-		try {
-			await env.DB.exec(`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL)`);
-			await env.DB.exec(`ALTER TABLE users ADD COLUMN salt TEXT`).catch(() => { });
-			await env.DB.exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'expense'`).catch(() => { });
-			await env.DB.exec(`UPDATE users SET role = COALESCE(role, 'expense')`).catch(() => { });
+		const url = new URL(request.url);
 
-			// Ensure admin exists
-			const admin = await env.DB.prepare('SELECT id, email, role FROM users WHERE id = 1').first();
-			if (!admin) {
-				const salt = generateSalt();
-				const pwd = env.ADMIN_DEFAULT_PASSWORD || 'admin123';
-				const hash = await pbkdf2Hash(pwd, salt);
-				await env.DB.prepare('INSERT INTO users (id, email, password_hash, name, salt, role) VALUES (1, ?, ?, ?, ?, ?)')
-					.bind('admin@bogingo.com', hash, 'Admin', salt, 'admin').run();
-			} else {
-				const updates: string[] = [];
-				const values: any[] = [];
-
-				if (admin.email !== 'admin@bogingo.com') {
-					updates.push('email = ?');
-					values.push('admin@bogingo.com');
+		// 1. Early Static Assets & SPA Client-side Route Delivery (Zero DB calls)
+		if (request.method === 'GET' && !url.pathname.startsWith('/api/')) {
+			try {
+				const assetResponse = await env.ASSETS.fetch(request);
+				if (assetResponse.status !== 404) {
+					return assetResponse;
 				}
-
-				if (admin.role !== 'admin') {
-					updates.push('role = ?');
-					values.push('admin');
-				}
-
-				if (updates.length > 0) {
-					await env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = 1`).bind(...values).run();
-				}
+				// Fallback to index.html for SPA client-side routes
+				return await env.ASSETS.fetch(new URL('/index.html', request.url));
+			} catch {
+				return await env.ASSETS.fetch(new URL('/index.html', request.url));
 			}
-
-			// Schema updates (idempotent)
-			const schemaUpdates = [
-				`ALTER TABLE quotes ADD COLUMN company_id INTEGER;`,
-				`ALTER TABLE quotes ADD COLUMN client_id INTEGER;`,
-				`ALTER TABLE quotes ADD COLUMN project_id INTEGER;`,
-				`ALTER TABLE quotes ADD COLUMN title TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN introduction TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN scope_summary TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN deliverables TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN items TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN payment_terms TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN validity_period INTEGER;`,
-				`ALTER TABLE quotes ADD COLUMN conclusion TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN notes TEXT;`,
-				`ALTER TABLE quotes ADD COLUMN amount REAL;`,
-				`ALTER TABLE invoices ADD COLUMN company_id INTEGER;`,
-				`ALTER TABLE receipts ADD COLUMN company_id INTEGER;`,
-				`CREATE TABLE IF NOT EXISTS project_columns (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, position INTEGER NOT NULL);`,
-				`CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, column_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, priority TEXT DEFAULT 'medium', due_date TEXT, assignee TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
-				`CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, due_date TEXT, status TEXT DEFAULT 'pending');`,
-				`CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, priority TEXT DEFAULT 'medium', status TEXT DEFAULT 'open', created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
-				`CREATE TABLE IF NOT EXISTS statement_uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'mpesa', file_key TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'processing', total_transactions INTEGER NOT NULL DEFAULT 0, categorized_transactions INTEGER NOT NULL DEFAULT 0, error_message TEXT, uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP, processed_at TEXT);`,
-				`CREATE TABLE IF NOT EXISTS statement_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, upload_id INTEGER NOT NULL, user_id INTEGER NOT NULL, external_ref TEXT, tx_date TEXT NOT NULL, description TEXT NOT NULL, amount REAL NOT NULL, direction TEXT CHECK(direction IN ('debit', 'credit')) NOT NULL, balance REAL, counterparty TEXT, raw_line TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
-				`CREATE TABLE IF NOT EXISTS transaction_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER NOT NULL, category TEXT NOT NULL, confidence REAL DEFAULT 0, method TEXT CHECK(method IN ('rule', 'ai', 'manual')) NOT NULL, reason TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
-				`CREATE TABLE IF NOT EXISTS category_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id INTEGER NOT NULL, user_id INTEGER NOT NULL, previous_category TEXT, new_category TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`,
-				`CREATE INDEX IF NOT EXISTS idx_statement_uploads_user_id ON statement_uploads(user_id);`,
-				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_upload_id ON statement_transactions(upload_id);`,
-				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_user_id ON statement_transactions(user_id);`,
-				`CREATE INDEX IF NOT EXISTS idx_statement_transactions_tx_date ON statement_transactions(tx_date);`,
-				`CREATE INDEX IF NOT EXISTS idx_transaction_categories_tx_id ON transaction_categories(transaction_id);`,
-				`CREATE INDEX IF NOT EXISTS idx_category_feedback_tx_id ON category_feedback(transaction_id);`,
-				`ALTER TABLE statement_transactions ADD COLUMN parent_id INTEGER;`,
-				`ALTER TABLE statement_transactions ADD COLUMN is_charge INTEGER DEFAULT 0;`,
-				`ALTER TABLE quotes ADD COLUMN currency TEXT DEFAULT 'KSH';`
-			];
-			for (const update of schemaUpdates) {
-				await env.DB.exec(update).catch((e) => {
-					if (!e.message.includes('duplicate column name') && !e.message.includes('already exists')) {
-						console.log('Migration notice:', e.message);
-					}
-				});
-			}
-
-
-		} catch (error: any) {
-			console.log('Migration error:', error);
 		}
 
-		const url = new URL(request.url);
 		const cookies = parseCookie(request.headers.get('Cookie'));
 
 		// 2. Authentication
@@ -191,6 +129,50 @@ export default {
 				const hash = await pbkdf2Hash(String(password), salt);
 				await env.DB.prepare('INSERT INTO users (email, password_hash, name, salt, role) VALUES (?, ?, ?, ?, ?)')
 					.bind(normalizedEmail, hash, String(name).trim(), salt, normalizedRole).run();
+
+				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const userPasswordResetMatch = url.pathname.match(/^\/api\/users\/(\d+)\/password$/);
+		if (userPasswordResetMatch && request.method === 'POST') {
+			if (!currentUser || currentUser.role !== 'admin') {
+				return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+			}
+
+			try {
+				const userId = Number(userPasswordResetMatch[1]);
+				if (!Number.isFinite(userId) || userId <= 0) {
+					return new Response(JSON.stringify({ error: 'Invalid user id' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (userId === currentUser.user_id) {
+					return new Response(JSON.stringify({ error: 'Use profile settings to change your own password' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const { password, confirm_password } = await request.json();
+				const nextPassword = String(password || '');
+				const nextConfirmPassword = String(confirm_password || '');
+
+				if (nextPassword.length < 6) {
+					return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (nextPassword !== nextConfirmPassword) {
+					return new Response(JSON.stringify({ error: 'Passwords do not match' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
+				if (!user) {
+					return new Response(JSON.stringify({ error: 'User not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const salt = generateSalt();
+				const hash = await pbkdf2Hash(nextPassword, salt);
+				await env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?').bind(hash, salt, userId).run();
+				await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
 
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -324,46 +306,70 @@ export default {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 
 			try {
-				const incomeResult = await env.DB.prepare('SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = ?').bind(currentUser.user_id, 'income').first();
-				const expenseResult = await env.DB.prepare('SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = ?').bind(currentUser.user_id, 'expense').first();
-				const pendingInvoicesResult = await env.DB.prepare('SELECT COUNT(*) as count FROM invoices WHERE user_id = ? AND status != ?').bind(currentUser.user_id, 'paid').first();
-				const activeProjectsResult = await env.DB.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ?').bind(currentUser.user_id).first();
-
-				const recentTransactions = await env.DB.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC LIMIT 5').bind(currentUser.user_id).all();
-
-				const upcomingInvoices = await env.DB.prepare(`
-                SELECT i.*, c.name as client_name, comp.name as company_name
-                FROM invoices i
-                LEFT JOIN clients c ON i.client_id = c.id
-                LEFT JOIN companies comp ON i.company_id = comp.id
-                WHERE i.user_id = ? AND i.due_date >= date('now')
-                ORDER BY i.due_date ASC
-                LIMIT 5
-            `).bind(currentUser.user_id).all();
-
-				const monthlyTrends = await env.DB.prepare(`
-                SELECT strftime('%Y-%m', date) as month, strftime('%Y-%m', date) as month_name,
-                SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
-                SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expenses
-                FROM transactions WHERE user_id = ? GROUP BY strftime('%Y-%m', date) ORDER BY month DESC LIMIT 12
-            `).bind(currentUser.user_id).all();
-
-				const projectBreakdown = await env.DB.prepare(`
-                SELECT COALESCE(p.name, 'Uncategorized') as project_name, p.id as project_id,
-                SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END) as income,
-                SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END) as expenses,
-                SUM(t.amount) as total
-                FROM transactions t LEFT JOIN projects p ON t.project_id = p.id
-                WHERE t.user_id = ? GROUP BY p.id, p.name HAVING total > 0 ORDER BY total DESC LIMIT 10
-            `).bind(currentUser.user_id).all();
-
-				const categoryBreakdown = await env.DB.prepare(`
-                SELECT category,
-                SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
-                SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expenses,
-                SUM(amount) as total
-                FROM transactions WHERE user_id = ? GROUP BY category ORDER BY total DESC LIMIT 10
-            `).bind(currentUser.user_id).all();
+				const [
+					incomeResult,
+					expenseResult,
+					pendingInvoicesResult,
+					activeProjectsResult,
+					recentTransactions,
+					upcomingInvoices,
+					monthlyTrends,
+					projectBreakdown,
+					categoryBreakdown,
+					budgetData
+				] = await Promise.all([
+					env.DB.prepare('SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = ?').bind(currentUser.user_id, 'income').first(),
+					env.DB.prepare('SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = ?').bind(currentUser.user_id, 'expense').first(),
+					env.DB.prepare('SELECT COUNT(*) as count FROM invoices WHERE user_id = ? AND status != ?').bind(currentUser.user_id, 'paid').first(),
+					env.DB.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ?').bind(currentUser.user_id).first(),
+					env.DB.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC LIMIT 5').bind(currentUser.user_id).all(),
+					env.DB.prepare(`
+						SELECT i.*, c.name as client_name, comp.name as company_name
+						FROM invoices i
+						LEFT JOIN clients c ON i.client_id = c.id
+						LEFT JOIN companies comp ON i.company_id = comp.id
+						WHERE i.user_id = ? AND i.due_date >= date('now')
+						ORDER BY i.due_date ASC
+						LIMIT 5
+					`).bind(currentUser.user_id).all(),
+					env.DB.prepare(`
+						SELECT strftime('%Y-%m', date) as month, strftime('%Y-%m', date) as month_name,
+						SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+						SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expenses
+						FROM transactions WHERE user_id = ? GROUP BY strftime('%Y-%m', date) ORDER BY month DESC LIMIT 12
+					`).bind(currentUser.user_id).all(),
+					env.DB.prepare(`
+						SELECT COALESCE(p.name, 'Uncategorized') as project_name, p.id as project_id,
+						SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE 0 END) as income,
+						SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END) as expenses,
+						SUM(t.amount) as total
+						FROM transactions t LEFT JOIN projects p ON t.project_id = p.id
+						WHERE t.user_id = ? GROUP BY p.id, p.name HAVING total > 0 ORDER BY total DESC LIMIT 10
+					`).bind(currentUser.user_id).all(),
+					env.DB.prepare(`
+						SELECT category,
+						SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+						SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expenses,
+						SUM(amount) as total
+						FROM transactions WHERE user_id = ? GROUP BY category ORDER BY total DESC LIMIT 10
+					`).bind(currentUser.user_id).all(),
+					(async () => {
+						const budgets = await env.DB.prepare('SELECT * FROM budgets WHERE user_id = ?').bind(currentUser.user_id).all();
+						if (!budgets.results || budgets.results.length === 0) return [];
+						const minStartDate = (budgets.results as any[]).reduce((min: string, b: any) => (!min || b.start_date < min ? b.start_date : min), '');
+						const expenses = await env.DB.prepare(`
+							SELECT category, SUM(amount) as total
+							FROM transactions 
+							WHERE user_id = ? AND type = 'expense' AND date >= ?
+							GROUP BY category
+						`).bind(currentUser.user_id, minStartDate).all();
+						const expenseMap = new Map((expenses.results || []).map((e: any) => [e.category, e.total]));
+						return (budgets.results as any[]).map(budget => ({
+							...budget,
+							spent: expenseMap.get(budget.category) || 0
+						}));
+					})()
+				]);
 
 				const data = {
 					theme: cookies['theme'] || 'light',
@@ -381,18 +387,7 @@ export default {
 						projectBreakdown: projectBreakdown.results || [],
 						categoryBreakdown: categoryBreakdown.results || []
 					},
-					budgets: await (async () => {
-						const budgets = await env.DB.prepare('SELECT * FROM budgets WHERE user_id = ?').bind(currentUser.user_id).all();
-						const budgetData = [];
-						for (const budget of budgets.results as any[]) {
-							const spent = await env.DB.prepare("SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND category = ? AND type = 'expense' AND date >= ?").bind(currentUser.user_id, budget.category, budget.start_date).first();
-							budgetData.push({
-								...budget,
-								spent: spent?.total || 0
-							});
-						}
-						return budgetData;
-					})()
+					budgets: budgetData
 				};
 				return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
@@ -536,14 +531,21 @@ export default {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
 				const budgets = await env.DB.prepare('SELECT * FROM budgets WHERE user_id = ?').bind(currentUser.user_id).all();
-				const results = [];
-				for (const budget of budgets.results as any[]) {
-					const spent = await env.DB.prepare("SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND category = ? AND type = 'expense' AND date >= ?").bind(currentUser.user_id, budget.category, budget.start_date).first();
-					results.push({
-						...budget,
-						spent: spent?.total || 0
-					});
+				if (!budgets.results || budgets.results.length === 0) {
+					return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } });
 				}
+				const minStartDate = (budgets.results as any[]).reduce((min: string, b: any) => (!min || b.start_date < min ? b.start_date : min), '');
+				const expenses = await env.DB.prepare(`
+					SELECT category, SUM(amount) as total
+					FROM transactions 
+					WHERE user_id = ? AND type = 'expense' AND date >= ?
+					GROUP BY category
+				`).bind(currentUser.user_id, minStartDate).all();
+				const expenseMap = new Map((expenses.results || []).map((e: any) => [e.category, e.total]));
+				const results = (budgets.results as any[]).map(budget => ({
+					...budget,
+					spent: expenseMap.get(budget.category) || 0
+				}));
 				return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -589,6 +591,34 @@ export default {
 				return new Response(JSON.stringify(receipt), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const receiptFileMatch = url.pathname.match(/^\/api\/receipts\/(\d+)\/file$/);
+		if (receiptFileMatch && request.method === 'GET') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const receipt = isAdmin
+					? await env.DB.prepare('SELECT id, file_key, file_name, file_type FROM receipts WHERE id = ?').bind(receiptFileMatch[1]).first()
+					: await env.DB.prepare('SELECT id, file_key, file_name, file_type FROM receipts WHERE id = ? AND user_id = ?').bind(receiptFileMatch[1], currentUser.user_id).first();
+
+				if (!receipt?.file_key) {
+					return new Response(JSON.stringify({ error: 'File not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const object = await env.BUCKET.get(receipt.file_key as string);
+				if (!object) {
+					return new Response(JSON.stringify({ error: 'File not found in storage' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				return new Response(object.body, {
+					headers: {
+						'Content-Type': (object.httpMetadata?.contentType as string) || (receipt.file_type as string) || 'application/octet-stream',
+						'Content-Disposition': `inline; filename="${receipt.file_name || `receipt-${receipt.id}`}"`,
+					},
+				});
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 			}
 		}
 
@@ -740,9 +770,9 @@ export default {
 				if (!receipt) return new Response('Receipt not found', { status: 404 });
 
 				if (isAdmin) {
-					await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ?').bind(status, receiptId).run();
+					await env.DB.prepare('UPDATE receipts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(status, receiptId).run();
 				} else {
-					await env.DB.prepare('UPDATE receipts SET status = ? WHERE id = ? AND user_id = ?').bind(status, receiptId, currentUser.user_id).run();
+					await env.DB.prepare('UPDATE receipts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').bind(status, receiptId, currentUser.user_id).run();
 				}
 
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
@@ -793,35 +823,183 @@ export default {
 		}
 
 		// Receipts CUD API
+		if (url.pathname === '/api/receipts/upload' && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const formData = await request.formData();
+				const file = formData.get('file') as File | null;
+
+				if (!file) {
+					return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (file.size > 10 * 1024 * 1024) {
+					return new Response(JSON.stringify({ error: 'File too large. Maximum size is 10MB.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const originalName = file.name || 'receipt';
+				const normalizedName = sanitizeFileName(originalName);
+				const normalizedLower = normalizedName.toLowerCase();
+				const isPdf = file.type === 'application/pdf' || normalizedLower.endsWith('.pdf');
+				const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(normalizedLower);
+
+				if (!isPdf && !isImage) {
+					return new Response(JSON.stringify({ error: 'Only PDF, PNG, JPG, and WEBP receipts are supported.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const contentType = file.type || (isPdf ? 'application/pdf' : 'application/octet-stream');
+				const fileKey = `receipts/${currentUser.user_id}/${Date.now()}-${crypto.randomUUID()}-${normalizedName}`;
+				await env.BUCKET.put(fileKey, await file.arrayBuffer(), {
+					httpMetadata: { contentType }
+				});
+
+				const now = new Date().toISOString();
+				const uploadDate = now.split('T')[0];
+				const receiptResult = await env.DB.prepare(`
+					INSERT INTO receipts (
+						user_id, receipt_type, merchant_name, company_id, client_id, project_id, image_url, file_key, file_name, file_type, file_size,
+						amount, status, date, items, description, notes, payment_method, reference_number, ocr_status, created_at, updated_at
+					)
+					VALUES (?, 'incoming', NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, 'draft', ?, '[]', ?, ?, NULL, NULL, 'pending', ?, ?)
+					RETURNING id, status, date
+				`).bind(
+					currentUser.user_id,
+					fileKey,
+					originalName,
+					contentType,
+					file.size,
+					uploadDate,
+					`Uploaded receipt: ${originalName}`,
+					null,
+					now,
+					now
+				).first() as any;
+
+				if (!receiptResult?.id) {
+					await env.BUCKET.delete(fileKey).catch(() => { });
+					return new Response(JSON.stringify({ error: 'Failed to create receipt record' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				const receiptId = receiptResult.id;
+					const fileUrl = `/api/receipts/${receiptId}/file`;
+					await env.DB.prepare('UPDATE receipts SET image_url = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+						.bind(fileUrl, now, receiptId, currentUser.user_id).run();
+
+				await processReceiptUpload({
+					env,
+					receiptId,
+					userId: currentUser.user_id,
+					fileKey,
+					fileName: originalName,
+					fileType: contentType
+				});
+
+				return new Response(JSON.stringify({
+					success: true,
+					receipt: {
+						id: receiptId,
+						image_url: fileUrl,
+						file_name: originalName,
+						status: receiptResult.status,
+						date: receiptResult.date
+					}
+				}), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+			}
+		}
+
 		if (url.pathname === '/api/receipts' && request.method === 'POST') {
 			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 			try {
 				const data = await request.json();
-				const { id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items } = data;
+				const { id, client_id, company_id, project_id, date, amount, status, payment_method, reference_number, notes, items, merchant_name } = data;
+				const normalizedMerchantName = String(merchant_name || '').trim() || null;
+				const normalizedClientId = client_id === '' || client_id === null || client_id === undefined ? null : client_id;
+				const normalizedCompanyId = company_id === '' || company_id === null || company_id === undefined ? null : company_id;
+				const normalizedProjectId = project_id === '' || project_id === null || project_id === undefined ? null : project_id;
 
 				if (id) {
-					const updateReceiptQuery = isAdmin ? `
-                        UPDATE receipts
-                        SET client_id=?, company_id=?, project_id=?, date=?, amount=?, payment_method=?, reference_number=?, notes=?, items=?
-                        WHERE id=?
-                    ` : `
-                        UPDATE receipts
-                        SET client_id=?, company_id=?, project_id=?, date=?, amount=?, payment_method=?, reference_number=?, notes=?, items=?
-                        WHERE id=? AND user_id=?
-                    `;
-					const updateArgs = isAdmin
-						? [client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, id]
-						: [client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, id, currentUser.user_id];
-					await env.DB.prepare(updateReceiptQuery).bind(...updateArgs).run();
+					const existingReceipt = isAdmin
+						? await env.DB.prepare('SELECT id, user_id, receipt_type FROM receipts WHERE id = ?').bind(id).first()
+						: await env.DB.prepare('SELECT id, user_id, receipt_type FROM receipts WHERE id = ? AND user_id = ?').bind(id, currentUser.user_id).first();
+
+					if (!existingReceipt) {
+						return new Response(JSON.stringify({ error: 'Receipt not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+					}
+
+					if ((existingReceipt as any).receipt_type === 'incoming') {
+						const updateReceiptQuery = isAdmin ? `
+							UPDATE receipts
+							SET merchant_name = COALESCE(?, merchant_name), company_id = NULL, client_id = NULL, project_id=?, date=?, amount=?, status=?, payment_method=?, reference_number=?, notes=?, items=?, updated_at=CURRENT_TIMESTAMP
+							WHERE id=?
+						` : `
+							UPDATE receipts
+							SET merchant_name = COALESCE(?, merchant_name), company_id = NULL, client_id = NULL, project_id=?, date=?, amount=?, status=?, payment_method=?, reference_number=?, notes=?, items=?, updated_at=CURRENT_TIMESTAMP
+							WHERE id=? AND user_id=?
+						`;
+						const updateArgs = isAdmin
+							? [normalizedMerchantName, normalizedProjectId, date, amount, status || 'draft', payment_method, reference_number, notes, items, id]
+							: [normalizedMerchantName, normalizedProjectId, date, amount, status || 'draft', payment_method, reference_number, notes, items, id, currentUser.user_id];
+						await env.DB.prepare(updateReceiptQuery).bind(...updateArgs).run();
+					} else {
+						const updateReceiptQuery = isAdmin ? `
+							UPDATE receipts
+							SET merchant_name = NULL, client_id=?, company_id=?, project_id=?, date=?, amount=?, status=?, payment_method=?, reference_number=?, notes=?, items=?, updated_at=CURRENT_TIMESTAMP
+							WHERE id=?
+						` : `
+							UPDATE receipts
+							SET merchant_name = NULL, client_id=?, company_id=?, project_id=?, date=?, amount=?, status=?, payment_method=?, reference_number=?, notes=?, items=?, updated_at=CURRENT_TIMESTAMP
+							WHERE id=? AND user_id=?
+						`;
+						const updateArgs = isAdmin
+							? [normalizedClientId, normalizedCompanyId, normalizedProjectId, date, amount, status || 'draft', payment_method, reference_number, notes, items, id]
+							: [normalizedClientId, normalizedCompanyId, normalizedProjectId, date, amount, status || 'draft', payment_method, reference_number, notes, items, id, currentUser.user_id];
+						await env.DB.prepare(updateReceiptQuery).bind(...updateArgs).run();
+					}
+
+					await syncReceiptExpenseTransaction(env, Number((existingReceipt as any).id), Number((existingReceipt as any).user_id));
 				} else {
 					await env.DB.prepare(`
-                        INSERT INTO receipts (user_id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `).bind(currentUser.user_id, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, new Date().toISOString()).run();
+                        INSERT INTO receipts (user_id, receipt_type, merchant_name, client_id, company_id, project_id, date, amount, payment_method, reference_number, notes, items, created_at, updated_at)
+                        VALUES (?, 'outgoing', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `).bind(currentUser.user_id, normalizedClientId, normalizedCompanyId, normalizedProjectId, date, amount, payment_method, reference_number, notes, items, new Date().toISOString(), new Date().toISOString()).run();
 				}
 				return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
 			} catch (error: any) {
 				return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+			}
+		}
+
+		const receiptOcrRetryMatch = url.pathname.match(/^\/api\/receipts\/(\d+)\/reprocess-ocr$/);
+		if (receiptOcrRetryMatch && request.method === 'POST') {
+			if (!currentUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+			try {
+				const receipt = isAdmin
+					? await env.DB.prepare('SELECT id, user_id, file_key, file_name, file_type FROM receipts WHERE id = ?').bind(receiptOcrRetryMatch[1]).first()
+					: await env.DB.prepare('SELECT id, user_id, file_key, file_name, file_type FROM receipts WHERE id = ? AND user_id = ?').bind(receiptOcrRetryMatch[1], currentUser.user_id).first();
+
+				if (!receipt) {
+					return new Response(JSON.stringify({ error: 'Receipt not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				if (!(receipt as any).file_key) {
+					return new Response(JSON.stringify({ error: 'Receipt file not available for OCR' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+				}
+
+				await processReceiptUpload({
+					env,
+					receiptId: Number((receipt as any).id),
+					userId: Number((receipt as any).user_id),
+					fileKey: (receipt as any).file_key,
+					fileName: (receipt as any).file_name || null,
+					fileType: (receipt as any).file_type || null
+				});
+
+				const updated = await env.DB.prepare('SELECT ocr_status, ocr_error FROM receipts WHERE id = ?').bind(receiptOcrRetryMatch[1]).first();
+				return new Response(JSON.stringify({ success: true, receipt: updated }), { headers: { 'Content-Type': 'application/json' } });
+			} catch (error: any) {
+				return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 			}
 		}
 
@@ -1413,6 +1591,27 @@ export default {
 			try {
 				const table = deleteMatch[1];
 				const id = deleteMatch[2];
+				if (table === 'receipts') {
+					const receipt = isAdmin
+						? await env.DB.prepare('SELECT id, user_id, file_key, receipt_type FROM receipts WHERE id = ?').bind(id).first()
+						: await env.DB.prepare('SELECT id, user_id, file_key, receipt_type FROM receipts WHERE id = ? AND user_id = ?').bind(id, currentUser.user_id).first();
+
+					if (!receipt) {
+						return new Response(JSON.stringify({ error: 'Receipt not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+					}
+
+					if ((receipt as any).file_key) {
+						await env.BUCKET.delete((receipt as any).file_key).catch(() => { });
+					}
+
+					if ((receipt as any).receipt_type === 'incoming') {
+						if (isAdmin) {
+							await env.DB.prepare('DELETE FROM transactions WHERE receipt_id = ?').bind(id).run();
+						} else {
+							await env.DB.prepare('DELETE FROM transactions WHERE receipt_id = ? AND user_id = ?').bind(id, currentUser.user_id).run();
+						}
+					}
+				}
 				if (isAdmin) {
 					await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
 				} else {
@@ -1831,22 +2030,6 @@ export default {
 			}
 		}
 
-		// 4. SPA Fallback (Default for all other GET requests)
-		if (request.method === 'GET') {
-			try {
-				// First try serving static asset (e.g. main.js, css)
-				const assetResponse = await env.ASSETS.fetch(request);
-				if (assetResponse.status === 404 && !url.pathname.startsWith('/api/')) {
-					// If not found and not API, serve index.html
-					return env.ASSETS.fetch(new URL('/index.html', request.url));
-				}
-				return assetResponse;
-			} catch (e: any) {
-				// Fallback for local dev or error
-				return env.ASSETS.fetch(new URL('/index.html', request.url));
-			}
-		}
-
-		return new Response('Not Found', { status: 404 });
+		return new Response(JSON.stringify({ error: 'Not Found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
 	}
 };

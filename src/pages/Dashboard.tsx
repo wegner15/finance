@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import Nav from '../components/Nav';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
 import TrendingDown from 'lucide-react/dist/esm/icons/trending-down';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
@@ -76,7 +75,7 @@ const Dashboard: React.FC = () => {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="flex min-h-[50vh] w-full items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
@@ -85,9 +84,8 @@ const Dashboard: React.FC = () => {
   const { theme, path, stats, recentTransactions, upcomingInvoices, transactionStats, budgets } = data;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav theme={theme} />
-      <div className="md:ml-64 p-6 pt-20 md:pt-6">
+    <div className="w-full">
+      <div className="w-full">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Dashboard</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gradient-to-r from-green-400 to-green-600 text-white shadow-xl hover:shadow-2xl transition-shadow">

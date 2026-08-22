@@ -11,7 +11,6 @@ import Plus from 'lucide-react/dist/esm/icons/plus';
 import History from 'lucide-react/dist/esm/icons/history';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
-import Nav from '../components/Nav';
 import { useNotification } from '../contexts/NotificationContext';
 import { useConfirmation } from '../contexts/ConfirmationContext';
 
@@ -179,9 +178,8 @@ const SavingsGoals: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <Nav />
-      <div className="ml-0 md:ml-64 p-8 transition-all duration-300">
+    <div className="w-full">
+      <div className="w-full">
         <div className="max-w-7xl mx-auto space-y-8">
           <div className="flex justify-between items-center">
             <div>

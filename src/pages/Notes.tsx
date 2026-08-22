@@ -12,7 +12,6 @@ import Upload from 'lucide-react/dist/esm/icons/upload';
 import Download from 'lucide-react/dist/esm/icons/download';
 import X from 'lucide-react/dist/esm/icons/x';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
-import Nav from '../components/Nav';
 import { useNotification } from '../contexts/NotificationContext';
 import { useConfirmation } from '../contexts/ConfirmationContext';
 
@@ -181,7 +180,6 @@ const Notes: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 dark:from-gray-950 dark:to-indigo-950">
-      <Nav />
       <div className="ml-0 md:ml-64 flex h-screen overflow-hidden">
         {/* Notes Sidebar */}
         <div className="w-full md:w-80 border-r border-white/20 dark:border-white/10 flex flex-col bg-white/40 dark:bg-black/20 backdrop-blur-xl shrink-0">
